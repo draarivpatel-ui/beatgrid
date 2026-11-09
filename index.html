@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<meta name="description" content="BeatGrid: a silent visual Euclidean rhythm, polymetric phase analyzer, and Standard MIDI File exporter.">
+<meta name="description" content="BeatGrid: a silent Euclidean rhythm generator, polymetric phase analyzer, Standard MIDI File compiler, and LilyPond score studio.">
 <title>BeatGrid - Euclidean Rhythm Studio</title>
 <link rel="stylesheet" href="style.css">
 </head>
@@ -14,32 +14,34 @@
 <header class="site-header">
   <div class="brand">
     <span class="brand-mark" aria-hidden="true">
-      <svg viewBox="0 0 40 40" width="36" height="36" role="img" aria-label="BeatGrid mark">
-        <circle cx="20" cy="20" r="18" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.35"></circle>
-        <circle cx="20" cy="20" r="11" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.55"></circle>
-        <circle cx="20" cy="2" r="3.2" fill="currentColor"></circle>
-        <circle cx="33.8" cy="12.5" r="3.2" fill="currentColor"></circle>
-        <circle cx="28.5" cy="33.2" r="3.2" fill="currentColor"></circle>
-        <circle cx="11.5" cy="33.2" r="3.2" fill="currentColor"></circle>
-        <circle cx="6.2" cy="12.5" r="3.2" fill="currentColor"></circle>
+      <svg viewBox="0 0 40 40" width="34" height="34" role="img" aria-label="BeatGrid mark">
+        <rect x="1.5" y="1.5" width="37" height="37" fill="none" stroke="currentColor" stroke-width="1" opacity="0.28"></rect>
+        <circle cx="20" cy="20" r="14.5" fill="none" stroke="currentColor" stroke-width="1.25" opacity="0.45"></circle>
+        <circle cx="20" cy="20" r="8.5" fill="none" stroke="currentColor" stroke-width="1.25" opacity="0.65"></circle>
+        <polygon points="20,5.5 32.6,15.5 27.8,31.7 12.2,31.7 7.4,15.5" fill="none" stroke="currentColor" stroke-width="1" opacity="0.55"></polygon>
+        <rect x="18" y="3.5" width="4" height="4" fill="currentColor"></rect>
+        <rect x="30.6" y="13.5" width="4" height="4" fill="currentColor"></rect>
+        <rect x="25.8" y="29.7" width="4" height="4" fill="currentColor"></rect>
+        <rect x="10.2" y="29.7" width="4" height="4" fill="currentColor"></rect>
+        <rect x="5.4" y="13.5" width="4" height="4" fill="currentColor"></rect>
       </svg>
     </span>
     <span class="brand-copy">
       <strong>BeatGrid</strong>
-      <small>Euclidean rhythm &amp; polymetric phase studio</small>
+      <small>Euclidean drum computer &amp; engraved score studio</small>
     </span>
   </div>
   <div class="header-actions">
-    <span class="offline-badge" title="No network requests are made by this page">Offline only</span>
+    <span class="offline-readout" title="Zero network requests and zero audio output">Offline &middot; silent</span>
     <button type="button" id="printBtn" class="btn btn-ghost">Print</button>
     <button type="button" id="themeBtn" class="btn btn-ghost" aria-pressed="false">
-      <span id="themeIcon" aria-hidden="true">◐</span> <span id="themeLabel">Dark</span>
+      <span id="themeIcon" aria-hidden="true">&#9680;</span> <span id="themeLabel">Dark</span>
     </button>
   </div>
 </header>
 
 <p class="silence-note" role="note">
-  Visual analysis and file export only. This workspace never produces audio.
+  Visual analysis and file export only. This studio never opens an audio context or produces sound.
 </p>
 
 <main id="workspace" class="workspace">
@@ -47,8 +49,8 @@
   <!-- Global controls: one row above everything it scopes -->
   <section class="panel controls" aria-labelledby="controlsHeading">
     <div class="panel-head">
-      <h2 id="controlsHeading">Session</h2>
-      <p>Every chart, table, and export below uses these values.</p>
+      <h2 id="controlsHeading">Session clock &amp; score registers</h2>
+      <p>Every step matrix, phase ring, table, and binary export reads directly from these registers.</p>
     </div>
     <div class="control-row">
       <label class="field">
@@ -56,7 +58,7 @@
         <input type="number" id="bpm" min="20" max="300" step="1" value="120" inputmode="numeric">
       </label>
       <label class="field">
-        <span>PPQ</span>
+        <span>Division (PPQ)</span>
         <input type="number" id="ppq" min="24" max="960" step="24" value="480" inputmode="numeric">
       </label>
       <label class="field">
@@ -73,12 +75,12 @@
         <input type="text" id="title" value="BeatGrid Study" maxlength="60" spellcheck="false">
       </label>
       <label class="field field-check">
-        <span class="check-label"><input type="checkbox" id="textureToggle"> Texture fills</span>
-        <small>Accessibility pattern for print and color vision</small>
+        <span class="check-label"><input type="checkbox" id="textureToggle"> Engraved hatch fills</span>
+        <small>Cross-hatch pattern for print and color-vision clarity</small>
       </label>
     </div>
     <div class="preset-row" id="presetRow" aria-label="World rhythm presets">
-      <span class="preset-label">Add preset</span>
+      <span class="preset-label">Load necklace</span>
       <!-- Preset buttons injected by app.js -->
     </div>
   </section>
@@ -86,9 +88,9 @@
   <!-- Headline figures -->
   <section class="stat-row" aria-label="Phase cycle summary">
     <div class="stat-tile">
-      <span class="stat-label">Phase cycle</span>
+      <span class="stat-label">Phase horizon</span>
       <strong class="stat-value" id="statCycle">0</strong>
-      <span class="stat-unit">steps &middot; LCM of step counts</span>
+      <span class="stat-unit">steps &middot; LCM of track periods</span>
     </div>
     <div class="stat-tile">
       <span class="stat-label">Cycle duration</span>
@@ -98,7 +100,7 @@
     <div class="stat-tile">
       <span class="stat-label">Coincidences</span>
       <strong class="stat-value" id="statCoincidence">0</strong>
-      <span class="stat-unit">steps with 2+ simultaneous onsets</span>
+      <span class="stat-unit">steps with 2+ simultaneous strikes</span>
     </div>
     <div class="stat-tile">
       <span class="stat-label">Syncopation</span>
@@ -111,14 +113,14 @@
   <section class="panel" aria-labelledby="gridHeading">
     <div class="panel-head panel-head-row">
       <div>
-        <h2 id="gridHeading">Step grid editor</h2>
-        <p>Click any cell to toggle an onset. Grid edits switch a track to manual mode.</p>
+        <h2 id="gridHeading">Step matrix sequencer</h2>
+        <p>Press any step pad to toggle an onset. Direct step edits switch that voice to a manual vector.</p>
       </div>
-      <button type="button" id="addTrackBtn" class="btn btn-primary">Add track</button>
+      <button type="button" id="addTrackBtn" class="btn btn-primary">Add voice</button>
     </div>
     <div id="trackEditor" class="track-editor"></div>
     <p class="hint" id="gridHint">
-      Cells show one full pattern period. Strong beats are marked with a hairline rule.
+      Each row displays one full period for that voice. Downbeats carry an engraved left index rule.
     </p>
   </section>
 
@@ -127,7 +129,7 @@
     <section class="panel" aria-labelledby="wheelHeading">
       <div class="panel-head">
         <h2 id="wheelHeading">Concentric phase polygon wheel</h2>
-        <p>One ring per track, drawn over the shared phase cycle. Filled dots are onsets.</p>
+        <p>One engraved ring per voice plotted around the shared LCM horizon. Solid markers are onsets.</p>
       </div>
       <figure class="viz-root" id="wheelFigure">
         <div class="viz-legend" id="wheelLegend" aria-label="Track legend"></div>
@@ -138,8 +140,8 @@
         <figcaption id="wheelCaption">Phase positions share a single angular axis, one full turn per LCM cycle.</figcaption>
       </figure>
       <div class="view-switch">
-        <button type="button" class="btn btn-ghost is-active" id="wheelChartBtn" aria-pressed="true">Chart view</button>
-        <button type="button" class="btn btn-ghost" id="wheelTableBtn" aria-pressed="false">Table view</button>
+        <button type="button" class="btn btn-ghost is-active" id="wheelChartBtn" aria-pressed="true">Wheel diagram</button>
+        <button type="button" class="btn btn-ghost" id="wheelTableBtn" aria-pressed="false">Step ledger</button>
       </div>
       <div class="table-wrap" id="wheelTableWrap" hidden>
         <table id="wheelTable" class="data-table">
@@ -151,8 +153,8 @@
 
     <section class="panel" aria-labelledby="coHeading">
       <div class="panel-head">
-        <h2 id="coHeading">Coincidence matrix</h2>
-        <p>Shared onsets over one full phase cycle. Diagonal is each track's own onsets.</p>
+        <h2 id="coHeading">Coincidence &amp; Hamming matrices</h2>
+        <p>Shared strikes across one full phase cycle. Diagonal cells report each voice's total onsets.</p>
       </div>
       <div class="table-wrap">
         <table id="coincidenceTable" class="data-table matrix-table">
@@ -164,7 +166,7 @@
         <span class="scale-swatches" id="scaleSwatches" aria-hidden="true"></span>
         <span>High</span>
       </div>
-      <p class="hint">Pairwise Hamming distance (steps that disagree) is shown in the second table.</p>
+      <p class="hint">Pairwise Hamming distance (steps where two expanded vectors disagree) is tabulated below.</p>
       <div class="table-wrap">
         <table id="hammingTable" class="data-table matrix-table">
           <caption class="sr-only">Pairwise Hamming distances and rates</caption>
@@ -176,14 +178,14 @@
   <!-- Syncopation -->
   <section class="panel" aria-labelledby="syncHeading">
     <div class="panel-head">
-      <h2 id="syncHeading">Syncopation by track</h2>
-      <p>Weighted nearest stronger beat method. Higher values mean more metrical displacement.</p>
+      <h2 id="syncHeading">Syncopation index by voice</h2>
+      <p>Longuet-Higgins &amp; Lee / Keith weighted nearest-stronger-beat displacement across the sixteenth grid.</p>
     </div>
     <figure class="viz-root" id="syncFigure">
       <svg id="syncSvg" viewBox="0 0 720 190" role="img" aria-labelledby="syncTitle">
         <title id="syncTitle">Syncopation score per track</title>
       </svg>
-      <figcaption>Bar length is the raw weighted syncopation score; the value label repeats it.</figcaption>
+      <figcaption>Bar length shows raw weighted syncopation; the numeral at the right repeats the exact score.</figcaption>
     </figure>
     <div class="table-wrap">
       <table id="syncTable" class="data-table">
@@ -196,8 +198,8 @@
   <section class="panel" aria-labelledby="lyHeading">
     <div class="panel-head panel-head-row">
       <div>
-        <h2 id="lyHeading">LilyPond percussion score</h2>
-        <p>Plain text notation. Compile locally with <code>lilypond score.ly</code>.</p>
+        <h2 id="lyHeading">Engraved LilyPond percussion score</h2>
+        <p>Multi-staff <code>\drummode</code> source with independent <code>\time n/16</code> signatures. Compile with <code>lilypond score.ly</code>.</p>
       </div>
       <div class="button-cluster">
         <button type="button" id="copyLyBtn" class="btn btn-ghost">Copy text</button>
@@ -211,14 +213,14 @@
   <section class="panel" aria-labelledby="midiHeading">
     <div class="panel-head panel-head-row">
       <div>
-        <h2 id="midiHeading">Standard MIDI File (Format 0)</h2>
-        <p id="midiMeta">Binary .mid with MThd and MTrk chunks, VLQ deltas, and a tempo meta event.</p>
+        <h2 id="midiHeading">Standard MIDI File (Format 0) &amp; byte inspector</h2>
+        <p id="midiMeta">Binary .mid with MThd and MTrk chunks, base-128 VLQ delta times, and a 24-bit tempo meta event.</p>
       </div>
       <button type="button" id="downloadMidiBtn" class="btn btn-primary">Download .mid</button>
     </div>
     <div class="hex-toolbar">
       <label class="field field-inline">
-        <span>Bytes per line</span>
+        <span>Bytes per row</span>
         <select id="hexWidth">
           <option value="8">8</option>
           <option value="16" selected>16</option>
@@ -227,7 +229,7 @@
         </select>
       </label>
       <label class="field field-inline">
-        <span>Show</span>
+        <span>Chunk filter</span>
         <select id="hexRange">
           <option value="all" selected>Entire file</option>
           <option value="head">MThd header only</option>
@@ -247,7 +249,7 @@
 
 <footer class="site-footer">
   <p>BeatGrid <span id="versionLabel">1.0.0</span> &middot; zero dependencies &middot; zero network calls &middot; zero audio output</p>
-  <p>Bjorklund E(k, n, rot) &middot; SMF Format 0 &middot; LilyPond percussion notation</p>
+  <p>Bjorklund E(k, n, rot) &middot; SMF Format 0 VLQ compiler &middot; LilyPond polyrhythmic percussion score</p>
 </footer>
 
 <script src="rhythm.js"></script>

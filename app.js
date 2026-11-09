@@ -383,47 +383,47 @@
     }
 
     // One ring per track. Shared angular axis: one full turn per LCM cycle.
-    var slotsPerTrack = Math.max(1, Math.floor(a.cycleSteps / MAX_HUE_SLOTS));
+    var dotStride = Math.max(1, Math.ceil(a.cycleSteps / 72));
     a.tracks.slice(0, MAX_HUE_SLOTS).forEach(function (track, i) {
       var radius = ringCount > 1 ? minRadius + i * radiusStep : (minRadius + maxRadius) / 2;
       var color = seriesColor(i);
-      var points = [];
-      var onsets = [];
-      var slotCount = Math.min(slotsPerTrack * (i + 1), a.cycleSteps);
+      var onsetPoints = [];
+      var markers = [];
 
-      for (var j = 0; j < slotCount; j++) {
-        var step = Math.round(j * a.cycleSteps / slotCount);
-        if (step >= a.cycleSteps) continue;
+      for (var step = 0; step < a.cycleSteps; step++) {
+        var isOn = track.expanded[step] === 1;
+        if (!isOn && (step % dotStride !== 0)) continue;
         var theta = (step / a.cycleSteps) * Math.PI * 2 - Math.PI / 2;
         var px = cx + Math.cos(theta) * radius;
         var py = cy + Math.sin(theta) * radius;
-        points.push([px, py]);
-        onsets.push(track.expanded[step] === 1);
+        if (isOn) onsetPoints.push([px, py]);
+        markers.push({ px: px, py: py, step: step, isOn: isOn });
       }
 
-      if (points.length > 2) {
-        var d = points.map(function (p, k) { return (k ? 'L' : 'M') + p[0].toFixed(2) + ' ' + p[1].toFixed(2); }).join(' ') + ' Z';
+      if (onsetPoints.length >= 2) {
+        var d = onsetPoints.map(function (p, k) {
+          return (k ? 'L' : 'M') + p[0].toFixed(2) + ' ' + p[1].toFixed(2);
+        }).join(' ') + (onsetPoints.length > 2 ? ' Z' : '');
         svg.appendChild(svgEl('path', { d: d, className: 'wheel-arc', stroke: color }));
       }
 
-      points.forEach(function (p, k) {
-        var isOn = onsets[k];
+      markers.forEach(function (m) {
         var dot = svgEl('circle', {
-          cx: p[0], cy: p[1], r: isOn ? 4.5 : 2.2,
-          fill: isOn ? color : 'var(--surface-1)',
-          className: 'wheel-dot' + (isOn ? '' : ' is-rest')
+          cx: m.px, cy: m.py, r: m.isOn ? 4.2 : 1.9,
+          fill: m.isOn ? color : 'var(--surface-1)',
+          className: 'wheel-dot' + (m.isOn ? '' : ' is-rest')
         });
         svg.appendChild(dot);
 
-        var hit = svgEl('circle', { cx: p[0], cy: p[1], r: 12, className: 'wheel-hit', tabindex: 0, role: 'button' });
-        var label = track.name + ', step ' + (Math.round(k * a.cycleSteps / points.length) + 1) + ': ' + (isOn ? 'onset' : 'rest');
+        var hit = svgEl('circle', { cx: m.px, cy: m.py, r: 10, className: 'wheel-hit', tabindex: 0, role: 'button' });
+        var label = track.name + ', step ' + (m.step + 1) + ': ' + (m.isOn ? 'onset' : 'rest');
         hit.setAttribute('aria-label', label);
         var detail = {
-          title: isOn ? 'Onset' : 'Rest',
+          title: m.isOn ? 'Onset' : 'Rest',
           rows: [
-            { color: color, text: track.name },
-            { text: 'Step ' + (Math.round(k * a.cycleSteps / points.length) + 1) + ' of ' + a.cycleSteps },
-            { text: 'Phase ' + fmt(100 * k / points.length, 1) + '%' }
+            { color: color, text: track.name + ' (' + track.formula + ')' },
+            { text: 'Step ' + (m.step + 1) + ' of ' + a.cycleSteps },
+            { text: 'Phase ' + fmt(100 * m.step / a.cycleSteps, 1) + '%' }
           ]
         };
         hit.addEventListener('pointermove', function () { showTooltip(hit, detail); });
@@ -598,7 +598,7 @@
       var bar = svgEl('rect', {
         x: left, y: y, width: Math.max(2, barWidth), height: 18,
         className: 'sync-bar', fill: seriesColor(i),
-        rx: 4, ry: 4, tabindex: 0, role: 'img'
+        rx: 1, ry: 1, tabindex: 0, role: 'img'
       });
       bar.setAttribute('aria-label', item.name + ' syncopation score ' + item.score);
       var detail = {
