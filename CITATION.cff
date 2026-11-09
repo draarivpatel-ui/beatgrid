@@ -1,0 +1,35 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "BeatGrid"
+abstract: >-
+  A mathematical Euclidean rhythm drum computer, polymetric phase-cycle
+  analyzer, MIDI file compiler, and LilyPond percussion score studio. Computes,
+  draws, and writes files, and is deliberately silent with no audio output.
+type: software
+license: MIT
+repository-code: "https://github.com/draarivpatel-ui/beatgrid"
+url: "https://aariv.me/beatgrid/"
+keywords:
+  - midi
+  - rhythm
+  - euclidean
+  - music-theory
+  - lilypond
+  - drum-machine
+  - javascript
+  - zero-dependency
+authors:
+  - family-names: "Patel"
+    given-names: "Aariv"
+    alias: "draarivpatel-ui"
+preferred-citation:
+  type: software
+  title: "BeatGrid"
+  version: "1.0.0"
+  date-released: "2026-11-08"
+  license: MIT
+  url: "https://aariv.me/beatgrid/"
+  authors:
+    - family-names: "Patel"
+      given-names: "Aariv"
+      alias: "draarivpatel-ui"
