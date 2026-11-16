@@ -23,6 +23,8 @@
   var DEFAULT_GATE = 0.5;
   var DEFAULT_CHANNEL = 9;
   var MAX_TRACK_HUES = 8;
+  var MAX_STEPS = 64;
+  var MAX_CYCLE_STEPS = 4096;
 
   var DEFAULT_NOTES = [36, 38, 42, 56, 45, 49, 47, 51];
 
@@ -47,16 +49,16 @@
   var PRESETS = [
     { name: 'Tresillo', formula: 'E(3,8)', pulses: 3, steps: 8, rotation: 0, note: 36, description: 'Cuban tresillo, 3+3+2' },
     { name: 'Cinquillo', formula: 'E(5,8)', pulses: 5, steps: 8, rotation: 0, note: 38, description: 'Cuban cinquillo, 2+1+2+1+2' },
-    { name: 'Bossa Nova', formula: 'E(5,16)', pulses: 5, steps: 16, rotation: 0, note: 42, description: 'Bossa nova clave, 3+3+3+3+4' },
-    { name: 'West African Bell', formula: 'E(7,12)', pulses: 7, steps: 12, rotation: 0, note: 56, description: 'Ewe bell pattern, five 2s and two 1s' },
-    { name: 'Aksak 9/8', formula: 'E(4,9)', pulses: 4, steps: 9, rotation: 0, note: 45, description: 'Turkish aksak, 2+2+2+3' }
+    { name: 'Five in sixteen', formula: 'E(5,16)', pulses: 5, steps: 16, rotation: 0, note: 42, description: 'Even five-onset study, 3+3+3+3+4' },
+    { name: 'Seven in twelve', formula: 'E(7,12)', pulses: 7, steps: 12, rotation: 0, note: 56, description: 'Even seven-onset study, five 2s and two 1s' },
+    { name: 'Four in nine', formula: 'E(4,9)', pulses: 4, steps: 9, rotation: 0, note: 45, description: 'Even four-onset study, 2+2+2+3' }
   ];
 
   /* ---------- numeric helpers ---------- */
 
   function assertInteger(value, label) {
-    if (typeof value !== 'number' || !Number.isInteger(value)) {
-      throw new TypeError(label + ' must be an integer');
+    if (typeof value !== 'number' || !Number.isSafeInteger(value)) {
+      throw new TypeError(label + ' must be a safe integer');
     }
     return value;
   }
@@ -69,8 +71,8 @@
   }
 
   function gcd(a, b) {
-    a = Math.abs(Math.trunc(a));
-    b = Math.abs(Math.trunc(b));
+    a = Math.abs(assertInteger(a, 'a'));
+    b = Math.abs(assertInteger(b, 'b'));
     while (b !== 0) {
       var t = a % b;
       a = b;
@@ -80,11 +82,16 @@
   }
 
   function lcm(a, b) {
+    assertInteger(a, 'a');
+    assertInteger(b, 'b');
     if (a === 0 || b === 0) return 0;
-    return Math.abs((a / gcd(a, b)) * b);
+    var value = Math.abs((a / gcd(a, b)) * b);
+    if (!Number.isSafeInteger(value)) throw new RangeError('LCM exceeds the safe integer range');
+    return value;
   }
 
   function lcmAll(values) {
+    if (!Array.isArray(values)) throw new TypeError('values must be an array');
     var total = 1;
     for (var i = 0; i < values.length; i++) total = lcm(total, values[i]);
     return total;
@@ -103,6 +110,7 @@
   }
 
   function rotateVector(vector, rotation) {
+    if (!Array.isArray(vector)) throw new TypeError('vector must be an array');
     assertInteger(rotation, 'rotation');
     var n = vector.length;
     if (n === 0) return [];
@@ -131,7 +139,7 @@
   function euclideanRhythm(pulses, steps, rotation) {
     assertInteger(pulses, 'pulses');
     assertInteger(steps, 'steps');
-    if (steps <= 0) throw new RangeError('steps must be a positive integer');
+    if (steps <= 0 || steps > MAX_STEPS) throw new RangeError('steps must be between 1 and ' + MAX_STEPS);
     if (pulses < 0) throw new RangeError('pulses must not be negative');
     if (arguments.length < 3 || rotation === undefined || rotation === null) rotation = 0;
     assertInteger(rotation, 'rotation');
@@ -162,21 +170,35 @@
 
   function safeText(value, fallback, maxLength) {
     if (typeof value !== 'string' || value.length === 0) return fallback;
-    return value.replace(/[\r\n\t]+/g, ' ').slice(0, maxLength || 80);
+    return value.replace(/[\x00-\x1f\x7f-\x9f\u2028\u2029]+/g, ' ').trim().slice(0, maxLength || 80) || fallback;
+  }
+
+  function binaryPattern(pattern, allowEmpty) {
+    if (!Array.isArray(pattern)) throw new TypeError('pattern must be an array');
+    if ((!allowEmpty && pattern.length === 0) || pattern.length > MAX_STEPS) {
+      throw new RangeError('pattern needs 1 to ' + MAX_STEPS + ' steps');
+    }
+    return Array.from(pattern, function (value) {
+      if (value !== 0 && value !== 1 && value !== false && value !== true) {
+        throw new TypeError('pattern cells must be 0 or 1');
+      }
+      return value ? 1 : 0;
+    });
   }
 
   function normalizeTracks(tracks) {
     if (!Array.isArray(tracks)) throw new TypeError('tracks must be an array');
+    if (tracks.length > MAX_TRACK_HUES) throw new RangeError('at most 8 tracks are supported');
     var out = [];
     for (var i = 0; i < tracks.length; i++) {
       var raw = tracks[i];
-      if (!raw || typeof raw !== 'object') throw new TypeError('track ' + i + ' must be an object');
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new TypeError('track ' + i + ' must be an object');
       var pattern;
       var pulses;
       var steps;
       var rotation = 0;
-      if (Array.isArray(raw.pattern)) {
-        pattern = raw.pattern.map(function (v) { return v ? 1 : 0; });
+      if (raw.pattern !== undefined) {
+        pattern = binaryPattern(raw.pattern);
         pulses = pattern.filter(function (v) { return v === 1; }).length;
         steps = pattern.length;
       } else {
@@ -186,6 +208,8 @@
           rotation = assertInteger(raw.rotation, 'rotation');
         }
         pattern = euclideanRhythm(pulses, steps, rotation);
+        pulses = Math.min(pulses, steps);
+        rotation = ((rotation % steps) + steps) % steps;
       }
       if (steps === 0) throw new RangeError('track ' + i + ' needs at least one step');
       var note = raw.note === undefined ? DEFAULT_NOTES[i % DEFAULT_NOTES.length] : assertInteger(raw.note, 'note');
@@ -195,7 +219,7 @@
       var velocity = raw.velocity === undefined ? 96 : assertInteger(raw.velocity, 'velocity');
       velocity = clamp(velocity, 1, 127);
       var name = safeText(raw.name, 'Track ' + (i + 1), 40);
-      var formula = raw.formula || ('E(' + pulses + ',' + steps + ',' + rotation + ')');
+      var formula = safeText(raw.formula, Array.isArray(raw.pattern) ? 'Manual ' + steps + ' steps' : ('E(' + pulses + ',' + steps + ',' + rotation + ')'), 80);
       out.push({
         index: i,
         name: name,
@@ -214,8 +238,9 @@
   }
 
   function expandPattern(pattern, length) {
+    pattern = binaryPattern(pattern);
     assertInteger(length, 'length');
-    if (length < 0) throw new RangeError('length must not be negative');
+    if (length < 0 || length > MAX_CYCLE_STEPS) throw new RangeError('length must be between 0 and ' + MAX_CYCLE_STEPS);
     var out = new Array(length);
     for (var i = 0; i < length; i++) out[i] = pattern[i % pattern.length];
     return out;
@@ -228,6 +253,66 @@
     return d;
   }
 
+  function inspectPattern(pattern) {
+    var vector = binaryPattern(pattern);
+    var positions = [];
+    vector.forEach(function (value, index) { if (value) positions.push(index); });
+    var gaps = positions.map(function (position, index) {
+      return ((positions[(index + 1) % positions.length] - position + vector.length) % vector.length) || vector.length;
+    });
+    var period = vector.length;
+    for (var candidate = 1; candidate <= vector.length; candidate++) {
+      if (vector.length % candidate === 0 && vector.every(function (value, index) { return value === vector[index % candidate]; })) {
+        period = candidate;
+        break;
+      }
+    }
+    return {
+      steps: vector.length, onsets: positions.length, density: positions.length / vector.length,
+      positions: positions, gaps: gaps, fundamentalPeriod: period,
+      gapSpread: gaps.length ? Math.max.apply(null, gaps) - Math.min.apply(null, gaps) : 0
+    };
+  }
+
+  /* A session preserves both editable Euclidean voices and manual vectors. */
+  function validateSession(session) {
+    if (!session || typeof session !== 'object' || Array.isArray(session)) throw new TypeError('session must be an object');
+    if (session.schema !== 'beatgrid/session' || session.version !== 1) throw new TypeError('unsupported BeatGrid session schema or version');
+    if (typeof session.title !== 'string' || !session.title.trim() || session.title.length > 60 || /[\x00-\x1f\x7f]/.test(session.title)) throw new RangeError('title needs 1 to 60 characters without control characters');
+    var bpm = assertInteger(session.bpm, 'bpm');
+    if (bpm < 20 || bpm > 300) throw new RangeError('session bpm must be between 20 and 300');
+    var ppq = assertInteger(session.ppq, 'ppq');
+    if (ppq < 24 || ppq > 960) throw new RangeError('session ppq must be between 24 and 960');
+    if ([0.25, 0.5, 0.75, 1].indexOf(session.gate) === -1) throw new RangeError('session gate must be 0.25, 0.5, 0.75, or 1');
+    var normalized = normalizeTracks(session.tracks);
+    if (!normalized.length) throw new RangeError('session needs at least one voice');
+    var tracks = normalized.map(function (track, index) {
+      var raw = session.tracks[index];
+      ['note', 'channel', 'velocity'].forEach(function (field) {
+        if (raw[field] !== undefined && raw[field] !== track[field]) throw new RangeError('track ' + (index + 1) + ' ' + field + ' is outside the MIDI range');
+      });
+      var out = { name: track.name, note: track.note, channel: track.channel, velocity: track.velocity };
+      if (raw.pattern !== undefined) out.pattern = track.pattern.slice();
+      else {
+        if (raw.pulses > raw.steps) throw new RangeError('session pulses must not exceed steps');
+        out.pulses = track.pulses;
+        out.steps = track.steps;
+        out.rotation = track.rotation;
+      }
+      return out;
+    });
+    analyzePolyrhythm(tracks, bpm);
+    return { schema: 'beatgrid/session', version: 1, title: safeText(session.title, 'BeatGrid Study', 60), bpm: bpm, ppq: ppq, gate: session.gate, tracks: tracks };
+  }
+
+  function exportSession(session) { return JSON.stringify(validateSession(session), null, 2); }
+
+  function importSession(text) {
+    if (typeof text !== 'string') throw new TypeError('session import needs JSON text');
+    if (text.length > 131072) throw new RangeError('session JSON exceeds 128 KiB');
+    return validateSession(JSON.parse(text));
+  }
+
   /* ---------- metrical weight and syncopation ---------- */
 
   /*
@@ -236,7 +321,9 @@
    * 2 for eighth-note divisions, 1 for remaining sixteenths.
    */
   function metricalWeight(stepIndex, stepsPerBeat) {
-    var spb = stepsPerBeat || DEFAULT_STEPS_PER_BEAT;
+    assertInteger(stepIndex, 'stepIndex');
+    var spb = stepsPerBeat === undefined ? DEFAULT_STEPS_PER_BEAT : assertInteger(stepsPerBeat, 'stepsPerBeat');
+    if (spb < 1 || spb > 16) throw new RangeError('stepsPerBeat must be between 1 and 16');
     var bar = spb * 4;
     var pos = ((stepIndex % bar) + bar) % bar;
     if (pos === 0) return 4;
@@ -253,13 +340,16 @@
    * be syncopated because no stronger position follows it.
    */
   function syncopationIndex(pattern, stepsPerBeat) {
-    if (!Array.isArray(pattern) || pattern.length === 0) throw new RangeError('pattern must be nonempty');
-    var spb = stepsPerBeat || DEFAULT_STEPS_PER_BEAT;
+    pattern = binaryPattern(pattern);
+    var spb = stepsPerBeat === undefined ? DEFAULT_STEPS_PER_BEAT : assertInteger(stepsPerBeat, 'stepsPerBeat');
+    metricalWeight(0, spb);
     var n = pattern.length;
     var score = 0;
     var window = spb * 4;
-    for (var i = 0; i < n; i++) {
-      if (!pattern[i]) continue;
+    // Include every relative phase between the repeating voice and the meter.
+    var horizon = lcm(n, window);
+    for (var i = 0; i < horizon; i++) {
+      if (!pattern[i % n]) continue;
       var wi = metricalWeight(i, spb);
       for (var d = 1; d <= window; d++) {
         var wj = metricalWeight(i + d, spb);
@@ -285,7 +375,11 @@
     var secondsPerStep = 60 / rate / spb;
     var stepCounts = normalized.map(function (t) { return t.steps; });
     var cycleSteps = lcmAll(stepCounts);
+    if (cycleSteps > MAX_CYCLE_STEPS) {
+      throw new RangeError('shared cycle exceeds ' + MAX_CYCLE_STEPS + ' steps; use track lengths with common factors');
+    }
     var cycleSeconds = cycleSteps * secondsPerStep;
+    if (!Number.isFinite(cycleSeconds)) throw new RangeError('cycle duration must be finite');
     var cycleBeats = cycleSteps / spb;
 
     var expanded = normalized.map(function (t) {
@@ -336,11 +430,15 @@
 
     var perTrack = normalized.map(function (t) {
       var score = syncopationIndex(t.pattern, spb);
+      var evaluatedSteps = lcm(t.steps, spb * 4);
+      var evaluatedOnsets = t.onsets * evaluatedSteps / t.steps;
       return {
         name: t.name,
         score: score,
-        normalized: t.onsets === 0 ? 0 : score / t.onsets,
-        onsets: t.onsets
+        normalized: evaluatedOnsets === 0 ? 0 : score / evaluatedOnsets,
+        onsets: t.onsets,
+        evaluatedSteps: evaluatedSteps,
+        evaluatedOnsets: evaluatedOnsets
       };
     });
     var syncTotal = perTrack.reduce(function (acc, x) { return acc + x.score; }, 0);
@@ -348,7 +446,7 @@
       perTrack: perTrack,
       total: syncTotal,
       mean: syncTotal / n,
-      method: 'weighted nearest stronger beat (Longuet-Higgins / Lee, Keith)'
+      method: 'nearest stronger empty position over the joint voice and 4/4 meter cycle; an illustrative metric'
     };
 
     return {
@@ -390,11 +488,14 @@
   }
 
   function vlqDecode(bytes, start) {
-    var offset = start || 0;
+    if (!bytes || typeof bytes.length !== 'number') throw new TypeError('bytes must be a byte array');
+    var offset = start === undefined ? 0 : assertInteger(start, 'start');
+    if (offset < 0 || offset >= bytes.length) throw new RangeError('start is outside the byte array');
     var value = 0;
     var consumed = 0;
     while (offset < bytes.length && consumed < 4) {
       var b = bytes[offset];
+      if (!Number.isInteger(b) || b < 0 || b > 255) throw new TypeError('invalid byte in VLQ');
       value = (value * 128) + (b & 0x7f);
       consumed++;
       offset++;
@@ -420,7 +521,10 @@
   }
 
   function microsPerQuarter(bpm) {
-    return clamp(Math.round(60000000 / bpm), 0, 0xffffff);
+    assertPositive(bpm, 'bpm');
+    var value = Math.round(60000000 / bpm);
+    if (value < 1 || value > 0xffffff) throw new RangeError('tempo cannot be represented in a MIDI tempo event');
+    return value;
   }
 
   /* ---------- Standard MIDI File, format 0 ---------- */
@@ -451,8 +555,8 @@
     }
 
     var analysis = analyzePolyrhythm(tracks, bpm, { stepsPerBeat: spb });
-    var ticksPerStep = Math.max(1, Math.round(resolution / spb));
-    var gateTicks = Math.max(1, Math.round(ticksPerStep * gate));
+    if (resolution < spb) throw new RangeError('ppq must be at least stepsPerBeat');
+    var ticksPerStep = resolution / spb;
     var events = [];
 
     function addMeta(tick, order, data) {
@@ -471,14 +575,19 @@
       var expanded = track.expanded;
       for (var s = 0; s < analysis.cycleSteps; s++) {
         if (expanded[s] !== 1) continue;
-        var tick = s * ticksPerStep;
+        var tick = Math.round(s * ticksPerStep);
+        var nextTick = Math.round((s + 1) * ticksPerStep);
+        var gateTicks = Math.max(1, Math.round((nextTick - tick) * gate));
         var onStatus = 0x90 | track.channel;
         var offStatus = 0x80 | track.channel;
         var keyOn = tick + '|1|' + onStatus + '|' + track.note;
         var keyOff = (tick + gateTicks) + '|0|' + offStatus + '|' + track.note;
         if (!seen[keyOn]) {
-          seen[keyOn] = true;
-          events.push({ tick: tick, order: 1, data: [onStatus, track.note, track.velocity] });
+          var onEvent = { tick: tick, order: 1, data: [onStatus, track.note, track.velocity] };
+          seen[keyOn] = onEvent;
+          events.push(onEvent);
+        } else {
+          seen[keyOn].data[2] = Math.max(seen[keyOn].data[2], track.velocity);
         }
         if (!seen[keyOff]) {
           seen[keyOff] = true;
@@ -487,7 +596,7 @@
       }
     }
 
-    var lastTick = analysis.cycleSteps * ticksPerStep + gateTicks;
+    var lastTick = Math.round(analysis.cycleSteps * ticksPerStep);
     addMeta(lastTick, 2, [0xff, 0x2f, 0x00]);
 
     events.sort(function (a, b) {
@@ -518,7 +627,9 @@
   /* ---------- inspection helpers ---------- */
 
   function hexDump(bytes, width) {
-    var perLine = width || 16;
+    validateBytes(bytes);
+    var perLine = width === undefined ? 16 : assertInteger(width, 'width');
+    if (perLine < 1 || perLine > 256) throw new RangeError('width must be between 1 and 256');
     var lines = [];
     for (var i = 0; i < bytes.length; i += perLine) {
       var hex = [];
@@ -540,20 +651,31 @@
   }
 
   function describeMidiChunks(bytes) {
+    validateBytes(bytes);
     var chunks = [];
     var offset = 0;
     while (offset + 8 <= bytes.length) {
       var type = String.fromCharCode(bytes[offset], bytes[offset + 1], bytes[offset + 2], bytes[offset + 3]);
       var length = (bytes[offset + 4] * 0x1000000) + (bytes[offset + 5] * 0x10000) + (bytes[offset + 6] * 0x100) + bytes[offset + 7];
-      if (type !== 'MThd' && type !== 'MTrk') break;
+      if (type !== 'MThd' && type !== 'MTrk') throw new RangeError('unrecognized MIDI chunk');
+      if (offset + 8 + length > bytes.length) throw new RangeError('truncated MIDI chunk');
       chunks.push({ type: type, offset: offset, length: length });
       offset += 8 + length;
       if (chunks.length > 64) break;
     }
+    if (offset !== bytes.length) throw new RangeError('truncated MIDI chunk header');
     return chunks;
   }
 
   /* ---------- LilyPond percussion score ---------- */
+
+  function validateBytes(bytes) {
+    if (!Array.isArray(bytes) && !ArrayBuffer.isView(bytes)) throw new TypeError('bytes must be an array or typed byte array');
+    if (!Number.isSafeInteger(bytes.length) || bytes.length > 4194304) throw new RangeError('byte array exceeds 4 MiB');
+    for (var index = 0; index < bytes.length; index++) {
+      if (!Number.isInteger(bytes[index]) || bytes[index] < 0 || bytes[index] > 255) throw new TypeError('byte values must be integers from 0 to 255');
+    }
+  }
 
   function lilySafe(text, fallback) {
     var value = safeText(text, fallback, 60);
@@ -564,6 +686,7 @@
     var normalized = normalizeTracks(tracks);
     if (normalized.length === 0) throw new RangeError('at least one track is required');
     var rate = bpm === undefined ? DEFAULT_BPM : assertPositive(bpm, 'bpm');
+    if (!Number.isInteger(rate)) throw new RangeError('LilyPond tempo must be an integer BPM');
     var analysis = analyzePolyrhythm(normalized, rate);
     var heading = lilySafe(title, 'BeatGrid Study');
     var lines = [];
@@ -602,6 +725,7 @@
       lines.push('      shortInstrumentName = "' + shortName + '"');
       lines.push('    } {');
       lines.push('      \\time ' + t.steps + '/16');
+      lines.push('      \\tempo 4 = ' + rate);
       lines.push('      \\drummode {');
       for (var k = 0; k < tokens.length; k += 8) {
         lines.push('        ' + tokens.slice(k, k + 8).join(' '));
@@ -639,12 +763,18 @@
     DEFAULT_CHANNEL: DEFAULT_CHANNEL,
     DEFAULT_STEPS_PER_BEAT: DEFAULT_STEPS_PER_BEAT,
     MAX_TRACK_HUES: MAX_TRACK_HUES,
+    MAX_STEPS: MAX_STEPS,
+    MAX_CYCLE_STEPS: MAX_CYCLE_STEPS,
     DRUM_NAMES: DRUM_NAMES,
     euclideanRhythm: euclideanRhythm,
     rotateVector: rotateVector,
     normalizeTracks: normalizeTracks,
     expandPattern: expandPattern,
     hammingDistance: hammingDistance,
+    inspectPattern: inspectPattern,
+    validateSession: validateSession,
+    exportSession: exportSession,
+    importSession: importSession,
     metricalWeight: metricalWeight,
     syncopationIndex: syncopationIndex,
     analyzePolyrhythm: analyzePolyrhythm,

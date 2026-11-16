@@ -88,17 +88,20 @@
 
   function makeTrack(config) {
     var c = config || {};
-    var pulses = c.pulses === undefined ? 3 : c.pulses;
-    var steps = c.steps === undefined ? 8 : c.steps;
+    var pulses = c.pulses === undefined ? (c.pattern ? c.pattern.filter(Boolean).length : 3) : c.pulses;
+    var steps = c.steps === undefined ? (c.pattern ? c.pattern.length : 8) : c.steps;
     var rotation = c.rotation === undefined ? 0 : c.rotation;
+    var id = state.nextId++;
     return {
-      id: state.nextId++,
-      name: c.name || 'Track ' + state.nextId,
+      id: id,
+      name: c.name || 'Track ' + id,
       pulses: pulses,
       steps: steps,
       rotation: rotation,
       note: c.note === undefined ? 36 : c.note,
-      manual: null,
+      channel: c.channel === undefined ? 9 : c.channel,
+      velocity: c.velocity === undefined ? 96 : c.velocity,
+      manual: c.pattern ? c.pattern.slice() : null,
       colorSlot: 0
     };
   }
@@ -113,7 +116,7 @@
 
   function toEngineTracks() {
     return state.tracks.map(function (t) {
-      var base = { name: t.name, note: t.note, channel: 9, velocity: 96 };
+      var base = { name: t.name, note: t.note, channel: t.channel, velocity: t.velocity };
       if (t.manual) {
         base.pattern = t.manual.slice();
         base.formula = 'Manual ' + t.manual.length + ' steps';
@@ -200,19 +203,20 @@
   }
 
   function flashNote(message) {
-    var hint = $('gridHint');
-    var original = hint.textContent;
-    hint.textContent = message;
-    setTimeout(function () { hint.textContent = original; }, 2200);
+    $('sessionStatus').textContent = message;
   }
 
   function readControls() {
-    var bpm = parseInt($('bpm').value, 10);
-    var ppq = parseInt($('ppq').value, 10);
-    state.bpm = Number.isFinite(bpm) ? Math.min(300, Math.max(20, bpm)) : 120;
-    state.ppq = Number.isFinite(ppq) ? Math.min(960, Math.max(24, ppq)) : 480;
-    state.gate = parseFloat($('gate').value) || 0.5;
-    state.title = $('title').value || 'BeatGrid Study';
+    var bpm = Number($('bpm').value);
+    var ppq = Number($('ppq').value);
+    if (!Number.isInteger(bpm) || bpm < 20 || bpm > 300) throw new RangeError('Tempo must be an integer from 20 to 300 BPM');
+    if (!$('ppq').value.trim() || !Number.isInteger(ppq) || ppq < 24 || ppq > 960) throw new RangeError('Division must be an integer from 24 to 960');
+    var gate = Number($('gate').value);
+    if ([0.25, 0.5, 0.75, 1].indexOf(gate) === -1) throw new RangeError('Choose a note gate');
+    state.bpm = bpm;
+    state.ppq = ppq;
+    state.gate = gate;
+    state.title = $('title').value.trim() || 'BeatGrid Study';
   }
 
   /* ---------- step grid editor ---------- */
@@ -268,6 +272,9 @@
         ident.appendChild(nums);
       } else {
         ident.appendChild(el('span', { className: 'track-formula' }, 'Manual vector, click cells to edit'));
+        var reset = el('button', { type: 'button', className: 'btn btn-ghost' }, 'Reset to Euclidean');
+        reset.addEventListener('click', function () { t.manual = null; recompute(); });
+        ident.appendChild(reset);
       }
       row.appendChild(ident);
 
@@ -313,8 +320,8 @@
     var input = el('input', { type: 'number', min: min, max: max, step: 1, value: value, 'aria-label': label });
     wrap.appendChild(input);
     input.addEventListener('change', function () {
-      var v = parseInt(input.value, 10);
-      if (!Number.isFinite(v)) { input.value = value; return; }
+      var v = Number(input.value);
+      if (!input.value.trim() || !Number.isSafeInteger(v)) { input.value = value; flashNote(label + ' must be an integer'); return; }
       v = Math.min(max, Math.max(min, v));
       input.value = v;
       onChange(v);
@@ -336,6 +343,8 @@
   function renderWheel(a) {
     var svg = $('wheelSvg');
     clear(svg);
+    svg.appendChild(svgEl('title', { id: 'wheelTitle' }, 'Euclidean phase wheel'));
+    svg.appendChild(svgEl('desc', { id: 'wheelDesc' }, 'One ring per voice over the shared cycle. Focus a marker to inspect its step.'));
 
     var defs = svgEl('defs');
     var pattern = svgEl('pattern', {
@@ -383,7 +392,7 @@
     }
 
     // One ring per track. Shared angular axis: one full turn per LCM cycle.
-    var dotStride = Math.max(1, Math.ceil(a.cycleSteps / 72));
+    var dotStride = Math.max(1, Math.ceil(a.cycleSteps / 128));
     a.tracks.slice(0, MAX_HUE_SLOTS).forEach(function (track, i) {
       var radius = ringCount > 1 ? minRadius + i * radiusStep : (minRadius + maxRadius) / 2;
       var color = seriesColor(i);
@@ -392,7 +401,7 @@
 
       for (var step = 0; step < a.cycleSteps; step++) {
         var isOn = track.expanded[step] === 1;
-        if (!isOn && (step % dotStride !== 0)) continue;
+        if (step % dotStride !== 0) continue;
         var theta = (step / a.cycleSteps) * Math.PI * 2 - Math.PI / 2;
         var px = cx + Math.cos(theta) * radius;
         var py = cy + Math.sin(theta) * radius;
@@ -443,7 +452,8 @@
 
     $('wheelCaption').textContent = a.tracks.length + ' ring' + (a.tracks.length === 1 ? '' : 's') +
       ' over one ' + a.cycleSteps + '-step phase cycle (' + fmt(a.cycleSeconds, 2) + ' s). ' +
-      'Outer ring is track 1. Hover or focus a dot for its step.';
+      'Inner ring is track 1. ' + (dotStride > 1 ? 'Markers sample every ' + dotStride + ' steps. ' : '') +
+      'Export the session to preserve every step.';
 
     renderWheelLegend(a);
     renderWheelTable(a);
@@ -493,7 +503,7 @@
       var foot = el('tfoot');
       var fr = el('tr');
       var cell = el('td', { colspan: String(a.tracks.length + 2) },
-        'Showing first ' + show + ' of ' + a.cycleSteps + ' steps. The chart shows the full cycle.');
+        'Showing first ' + show + ' of ' + a.cycleSteps + ' steps. Matrices use the full cycle.');
       fr.appendChild(cell);
       foot.appendChild(fr);
       table.appendChild(foot);
@@ -575,6 +585,7 @@
   function renderSync(a) {
     var svg = $('syncSvg');
     clear(svg);
+    svg.appendChild(svgEl('title', { id: 'syncTitle' }, 'Illustrative syncopation score per voice'));
     var width = 720;
     var left = 190;
     var right = 640;
@@ -596,7 +607,7 @@
       svg.appendChild(svgEl('text', { x: left - 12, y: y + 13, className: 'sync-label', 'text-anchor': 'end' },
         'T' + (i + 1) + ' ' + item.name));
       var bar = svgEl('rect', {
-        x: left, y: y, width: Math.max(2, barWidth), height: 18,
+        x: left, y: y, width: barWidth, height: 18,
         className: 'sync-bar', fill: seriesColor(i),
         rx: 1, ry: 1, tabindex: 0, role: 'img'
       });
@@ -606,7 +617,7 @@
         rows: [
           { color: seriesColor(i), text: item.name },
           { text: 'Normalized ' + fmt(item.normalized, 2) + ' per onset' },
-          { text: item.onsets + ' onsets in its pattern' }
+          { text: item.evaluatedOnsets + ' onsets across ' + item.evaluatedSteps + ' meter-aligned steps' }
         ]
       };
       bar.addEventListener('pointermove', function () { showTooltip(bar, detail); });
@@ -623,7 +634,7 @@
     table.appendChild(el('caption', { className: 'sr-only' }, 'Syncopation scores per track'));
     var head = el('thead');
     var hr = el('tr');
-    ['Track', 'Formula', 'Onsets', 'Score', 'Per onset'].forEach(function (label, i) {
+    ['Track', 'Formula', 'Meter steps', 'Score', 'Per onset'].forEach(function (label, i) {
       hr.appendChild(el('th', { scope: 'col', className: i > 1 ? 'num' : '' }, label));
     });
     head.appendChild(hr);
@@ -633,7 +644,7 @@
       var tr = el('tr');
       tr.appendChild(el('th', { scope: 'row' }, 'T' + (i + 1) + ' ' + item.name));
       tr.appendChild(el('td', {}, a.tracks[i].formula));
-      tr.appendChild(el('td', { className: 'num' }, String(item.onsets)));
+      tr.appendChild(el('td', { className: 'num' }, String(item.evaluatedSteps)));
       tr.appendChild(el('td', { className: 'num' }, String(item.score)));
       tr.appendChild(el('td', { className: 'num' }, fmt(item.normalized, 2)));
       body.appendChild(tr);
@@ -696,16 +707,31 @@
 
   function recompute(options) {
     var opts = options || {};
-    readControls();
-    var engineTracks = toEngineTracks();
     try {
+      readControls();
+      var engineTracks = toEngineTracks();
       state.analysis = R.analyzePolyrhythm(engineTracks, state.bpm);
       state.midi = R.encodeMidiFile(engineTracks, state.bpm, state.ppq, { gate: state.gate });
       state.lily = R.exportLilyPond(engineTracks, state.bpm, state.title);
+      R.exportSession(currentSession());
     } catch (error) {
+      state.analysis = null;
+      state.midi = null;
+      state.lily = '';
+      ['downloadMidiBtn', 'downloadLyBtn', 'copyLyBtn', 'exportSessionBtn'].forEach(function (id) { $(id).disabled = true; });
+      ['wheelSvg', 'syncSvg', 'coincidenceTable', 'hammingTable', 'syncTable', 'wheelTable', 'chunkTable', 'diagnosticsTable'].forEach(function (id) { clear($(id)); });
+      $('wheelSvg').appendChild(svgEl('title', { id: 'wheelTitle' }, 'Phase wheel unavailable'));
+      $('wheelSvg').appendChild(svgEl('desc', { id: 'wheelDesc' }, 'Correct the session input to restore the diagram.'));
+      $('syncSvg').appendChild(svgEl('title', { id: 'syncTitle' }, 'Syncopation chart unavailable'));
+      ['statCycle', 'statSeconds', 'statCoincidence', 'statSync'].forEach(function (id) { $(id).textContent = '-'; });
+      $('lilyPreview').textContent = '';
+      $('hexDump').textContent = '';
       flashNote('Invalid input: ' + error.message);
-      return;
+      if (!opts.skipEditor) renderEditor();
+      return false;
     }
+    ['downloadMidiBtn', 'downloadLyBtn', 'copyLyBtn', 'exportSessionBtn'].forEach(function (id) { $(id).disabled = false; });
+    flashNote('Ready. Shared cycle: ' + state.analysis.cycleSteps + ' of ' + R.MAX_CYCLE_STEPS + ' allowed steps.');
     if (!opts.skipEditor) renderEditor();
     renderStats(state.analysis);
     renderWheel(state.analysis);
@@ -713,6 +739,39 @@
     renderSync(state.analysis);
     renderLily();
     renderHex();
+    renderDiagnostics(state.analysis);
+    return true;
+  }
+
+  function renderDiagnostics(a) {
+    var table = $('diagnosticsTable');
+    clear(table);
+    var head = el('tr');
+    ['Voice', 'Onsets / steps', 'Cyclic gaps', 'Shortest repeat', 'Gap spread'].forEach(function (label) { head.appendChild(el('th', { scope: 'col' }, label)); });
+    var thead = el('thead'); thead.appendChild(head); table.appendChild(thead);
+    var body = el('tbody');
+    a.tracks.forEach(function (track) {
+      var d = R.inspectPattern(track.pattern);
+      var row = el('tr');
+      [track.name, d.onsets + ' / ' + d.steps, d.gaps.length ? d.gaps.join(' + ') : 'No onsets', d.fundamentalPeriod + ' steps', d.gapSpread].forEach(function (value) { row.appendChild(el('td', {}, value)); });
+      body.appendChild(row);
+    });
+    table.appendChild(body);
+  }
+
+  function currentSession() {
+    return { schema: 'beatgrid/session', version: 1, title: state.title, bpm: state.bpm, ppq: state.ppq, gate: state.gate, tracks: toEngineTracks() };
+  }
+
+  function importSession() {
+    try {
+      var session = R.importSession($('sessionJson').value);
+      state.tracks = [];
+      session.tracks.forEach(addTrack);
+      ['bpm', 'ppq', 'gate', 'title'].forEach(function (id) { $(id).value = session[id]; });
+      recompute();
+      flashNote('Imported ' + session.tracks.length + ' voices.');
+    } catch (error) { flashNote('Import rejected: ' + error.message); }
   }
 
   /* ---------- theme and toggles ---------- */
@@ -739,6 +798,18 @@
   /* ---------- wiring ---------- */
 
   function wire() {
+    $('importSessionBtn').addEventListener('click', importSession);
+    $('exportSessionBtn').addEventListener('click', function () {
+      if (!state.analysis) return;
+      try {
+        var text = R.exportSession(currentSession());
+        $('sessionJson').value = text;
+        downloadBlob(new Blob([text], { type: 'application/json' }), safeFilename(state.title, 'json'));
+        flashNote('Session JSON exported. Manual and Euclidean voices are preserved.');
+      } catch (error) {
+        flashNote('Export rejected: ' + error.message);
+      }
+    });
     ['bpm', 'ppq', 'gate', 'title'].forEach(function (id) {
       $(id).addEventListener('input', function () { recompute({ skipEditor: true }); });
       $(id).addEventListener('change', function () { recompute({ skipEditor: true }); });
@@ -785,14 +856,17 @@
     $('hexRange').addEventListener('change', renderHex);
 
     $('downloadMidiBtn').addEventListener('click', function () {
+      if (!state.midi) return;
       downloadBlob(new Blob([state.midi], { type: 'audio/midi' }), safeFilename(state.title, 'mid'));
     });
 
     $('downloadLyBtn').addEventListener('click', function () {
+      if (!state.analysis) return;
       downloadBlob(new Blob([state.lily], { type: 'text/plain;charset=utf-8' }), safeFilename(state.title, 'ly'));
     });
 
     $('copyLyBtn').addEventListener('click', function () {
+      if (!state.analysis) return;
       var button = $('copyLyBtn');
       var done = function () {
         button.textContent = 'Copied';
@@ -811,12 +885,12 @@
   function init() {
     var saved = null;
     try { saved = localStorage.getItem('beatgrid-theme'); } catch (e) { /* storage is optional */ }
-    if (saved) applyTheme(saved);
+    if (saved === 'light' || saved === 'dark') applyTheme(saved);
 
     renderPresets();
     addTrack({ name: 'Tresillo', pulses: 3, steps: 8, note: 36 });
-    addTrack({ name: 'West African Bell', pulses: 7, steps: 12, note: 56 });
-    addTrack({ name: 'Aksak 9/8', pulses: 4, steps: 9, note: 45 });
+    addTrack({ name: 'Seven in twelve', pulses: 7, steps: 12, note: 56 });
+    addTrack({ name: 'Four in nine', pulses: 4, steps: 9, note: 45 });
     wire();
     recompute();
     $('versionLabel').textContent = R.VERSION;

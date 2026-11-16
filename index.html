@@ -28,7 +28,7 @@
     </span>
     <span class="brand-copy">
       <strong>BeatGrid</strong>
-      <small>Euclidean drum computer &amp; engraved score studio</small>
+      <small>Euclidean rhythms, analysis, and score export</small>
     </span>
   </div>
   <div class="header-actions">
@@ -49,8 +49,8 @@
   <!-- Global controls: one row above everything it scopes -->
   <section class="panel controls" aria-labelledby="controlsHeading">
     <div class="panel-head">
-      <h2 id="controlsHeading">Session clock &amp; score registers</h2>
-      <p>Every step matrix, phase ring, table, and binary export reads directly from these registers.</p>
+      <h2 id="controlsHeading">Session settings</h2>
+      <p>Set tempo, MIDI resolution, note length, and score title.</p>
     </div>
     <div class="control-row">
       <label class="field">
@@ -59,7 +59,7 @@
       </label>
       <label class="field">
         <span>Division (PPQ)</span>
-        <input type="number" id="ppq" min="24" max="960" step="24" value="480" inputmode="numeric">
+        <input type="number" id="ppq" min="24" max="960" step="1" value="480" inputmode="numeric">
       </label>
       <label class="field">
         <span>Note gate</span>
@@ -79,16 +79,17 @@
         <small>Cross-hatch pattern for print and color-vision clarity</small>
       </label>
     </div>
-    <div class="preset-row" id="presetRow" aria-label="World rhythm presets">
-      <span class="preset-label">Load necklace</span>
+    <div class="preset-row" id="presetRow" aria-label="Euclidean rhythm presets">
+      <span class="preset-label">Add a preset</span>
       <!-- Preset buttons injected by app.js -->
     </div>
+    <p id="sessionStatus" class="hint" role="status" aria-live="polite"></p>
   </section>
 
   <!-- Headline figures -->
   <section class="stat-row" aria-label="Phase cycle summary">
     <div class="stat-tile">
-      <span class="stat-label">Phase horizon</span>
+      <span class="stat-label">Cycle length</span>
       <strong class="stat-value" id="statCycle">0</strong>
       <span class="stat-unit">steps &middot; LCM of track periods</span>
     </div>
@@ -113,7 +114,7 @@
   <section class="panel" aria-labelledby="gridHeading">
     <div class="panel-head panel-head-row">
       <div>
-        <h2 id="gridHeading">Step matrix sequencer</h2>
+        <h2 id="gridHeading">Rhythm editor</h2>
         <p>Press any step pad to toggle an onset. Direct step edits switch that voice to a manual vector.</p>
       </div>
       <button type="button" id="addTrackBtn" class="btn btn-primary">Add voice</button>
@@ -124,12 +125,33 @@
     </p>
   </section>
 
+  <section class="panel" aria-labelledby="diagnosticsHeading">
+    <div class="panel-head">
+      <h2 id="diagnosticsHeading">Pattern inspector</h2>
+      <p>Inspect cyclic onset gaps and the shortest repeating vector. Gap spread alone does not prove maximal evenness.</p>
+    </div>
+    <div class="table-wrap"><table id="diagnosticsTable" class="data-table" aria-label="Pattern gaps and repeating periods"></table></div>
+  </section>
+
+  <section class="panel" aria-labelledby="sessionHeading">
+    <div class="panel-head">
+      <h2 id="sessionHeading">Save or restore a session</h2>
+      <p>Download the tempo, MIDI settings, title, and voices as JSON. Paste a saved session to restore it. Imports are validated before application.</p>
+    </div>
+    <label class="field" for="sessionJson">Session JSON</label>
+    <textarea id="sessionJson" class="session-json" rows="5" spellcheck="false" placeholder="Paste a beatgrid/session JSON file"></textarea>
+    <div class="button-cluster">
+      <button id="importSessionBtn" type="button" class="btn btn-ghost">Import session</button>
+      <button id="exportSessionBtn" type="button" class="btn btn-primary">Download session .json</button>
+    </div>
+  </section>
+
   <!-- Visualization row -->
   <div class="split-row">
     <section class="panel" aria-labelledby="wheelHeading">
       <div class="panel-head">
-        <h2 id="wheelHeading">Concentric phase polygon wheel</h2>
-        <p>One engraved ring per voice plotted around the shared LCM horizon. Solid markers are onsets.</p>
+        <h2 id="wheelHeading">Phase wheel</h2>
+        <p>One ring per voice across the shared cycle. Solid markers are onsets. Long cycles use sampled markers.</p>
       </div>
       <figure class="viz-root" id="wheelFigure">
         <div class="viz-legend" id="wheelLegend" aria-label="Track legend"></div>
@@ -178,14 +200,14 @@
   <!-- Syncopation -->
   <section class="panel" aria-labelledby="syncHeading">
     <div class="panel-head">
-      <h2 id="syncHeading">Syncopation index by voice</h2>
-      <p>Longuet-Higgins &amp; Lee / Keith weighted nearest-stronger-beat displacement across the sixteenth grid.</p>
+      <h2 id="syncHeading">Syncopation across 4/4 meter</h2>
+      <p>An illustrative score for onsets followed by stronger empty positions. Each voice is evaluated over its joint cycle with a 16-step meter.</p>
     </div>
     <figure class="viz-root" id="syncFigure">
       <svg id="syncSvg" viewBox="0 0 720 190" role="img" aria-labelledby="syncTitle">
         <title id="syncTitle">Syncopation score per track</title>
       </svg>
-      <figcaption>Bar length shows raw weighted syncopation; the numeral at the right repeats the exact score.</figcaption>
+      <figcaption>Raw scores cover each voice's meter cycle. Compare per-onset values when cycle lengths differ.</figcaption>
     </figure>
     <div class="table-wrap">
       <table id="syncTable" class="data-table">
@@ -198,7 +220,7 @@
   <section class="panel" aria-labelledby="lyHeading">
     <div class="panel-head panel-head-row">
       <div>
-        <h2 id="lyHeading">Engraved LilyPond percussion score</h2>
+        <h2 id="lyHeading">LilyPond percussion score</h2>
         <p>Multi-staff <code>\drummode</code> source with independent <code>\time n/16</code> signatures. Compile with <code>lilypond score.ly</code>.</p>
       </div>
       <div class="button-cluster">
@@ -213,7 +235,7 @@
   <section class="panel" aria-labelledby="midiHeading">
     <div class="panel-head panel-head-row">
       <div>
-        <h2 id="midiHeading">Standard MIDI File (Format 0) &amp; byte inspector</h2>
+        <h2 id="midiHeading">MIDI export and byte inspector</h2>
         <p id="midiMeta">Binary .mid with MThd and MTrk chunks, base-128 VLQ delta times, and a 24-bit tempo meta event.</p>
       </div>
       <button type="button" id="downloadMidiBtn" class="btn btn-primary">Download .mid</button>

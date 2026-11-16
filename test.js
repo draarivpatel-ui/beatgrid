@@ -19,15 +19,15 @@ test('E(5,8) is the cinquillo 10110110', () => {
   assert.equal(str(R.euclideanRhythm(5, 8)), '10110110');
 });
 
-test('E(5,16) is the bossa nova clave 1001001001001000', () => {
+test('E(5,16) is the five-in-sixteen vector 1001001001001000', () => {
   assert.equal(str(R.euclideanRhythm(5, 16)), '1001001001001000');
 });
 
-test('E(7,12) is the West African bell 101101011010', () => {
+test('E(7,12) is the seven-in-twelve vector 101101011010', () => {
   assert.equal(str(R.euclideanRhythm(7, 12)), '101101011010');
 });
 
-test('E(4,9) is the aksak 9/8 pattern 101010100', () => {
+test('E(4,9) is the four-in-nine vector 101010100', () => {
   assert.equal(str(R.euclideanRhythm(4, 9)), '101010100');
 });
 
@@ -221,8 +221,8 @@ test('syncopationIndex is positive for an offbeat pattern', () => {
 
 const TRACKS = [
   { name: 'Tresillo', pulses: 3, steps: 8, note: 36 },
-  { name: 'West African Bell', pulses: 7, steps: 12, note: 56 },
-  { name: 'Aksak 9/8', pulses: 4, steps: 9, note: 45 }
+  { name: 'Seven in twelve', pulses: 7, steps: 12, note: 56 },
+  { name: 'Four in nine', pulses: 4, steps: 9, note: 45 }
 ];
 
 test('analyzePolyrhythm computes the LCM cycle in steps', () => {
@@ -685,7 +685,7 @@ test('exportLilyPond rejects an empty track list', () => {
 /* Presets and module surface                                          */
 /* ------------------------------------------------------------------ */
 
-test('PRESETS contains exactly the five documented world rhythms', () => {
+test('PRESETS contains exactly the five documented Euclidean patterns', () => {
   assert.equal(R.PRESETS.length, 5);
   assert.deepEqual(R.PRESETS.map((p) => p.formula), [
     'E(3,8)', 'E(5,8)', 'E(5,16)', 'E(7,12)', 'E(4,9)'
