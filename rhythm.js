@@ -173,9 +173,9 @@
     return value.replace(/[\x00-\x1f\x7f-\x9f\u2028\u2029]+/g, ' ').trim().slice(0, maxLength || 80) || fallback;
   }
 
-  function binaryPattern(pattern, allowEmpty) {
+  function binaryPattern(pattern) {
     if (!Array.isArray(pattern)) throw new TypeError('pattern must be an array');
-    if ((!allowEmpty && pattern.length === 0) || pattern.length > MAX_STEPS) {
+    if (pattern.length === 0 || pattern.length > MAX_STEPS) {
       throw new RangeError('pattern needs 1 to ' + MAX_STEPS + ' steps');
     }
     return Array.from(pattern, function (value) {
