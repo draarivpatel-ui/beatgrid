@@ -71,15 +71,6 @@
     return cssVar(SEQ_STEPS[index]) || '#2a78d6';
   }
 
-  function escapeHtml(value) {
-    return String(value)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
-  }
-
   function fmt(value, digits) {
     return Number(value).toFixed(digits === undefined ? 2 : digits);
   }
