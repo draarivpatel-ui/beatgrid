@@ -28,7 +28,6 @@
     </span>
     <span class="brand-copy">
       <strong>BeatGrid</strong>
-      <small>Euclidean rhythms, analysis, and score export</small>
     </span>
   </div>
   <div class="header-actions">
@@ -160,10 +159,12 @@
           <desc id="wheelDesc">Each ring plots one track's onsets around a circle. Hover or focus a dot for its step and track.</desc>
         </svg>
         <figcaption id="wheelCaption">Phase positions share a single angular axis, one full turn per LCM cycle.</figcaption>
+        <p id="playStatus" class="hint" role="status" aria-live="polite"></p>
       </figure>
       <div class="view-switch">
         <button type="button" class="btn btn-ghost is-active" id="wheelChartBtn" aria-pressed="true">Wheel diagram</button>
         <button type="button" class="btn btn-ghost" id="wheelTableBtn" aria-pressed="false">Step ledger</button>
+        <button type="button" class="btn btn-ghost" id="cyclePlayBtn" aria-pressed="false">Run cycle</button>
       </div>
       <div class="table-wrap" id="wheelTableWrap" hidden>
         <table id="wheelTable" class="data-table">

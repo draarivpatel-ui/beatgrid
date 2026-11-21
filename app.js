@@ -21,6 +21,8 @@
     texture: false
   };
 
+  var play = { on: false, step: 0, carry: 0, last: 0 };
+
   /* ---------- small DOM helpers ---------- */
 
   function $(id) { return document.getElementById(id); }
@@ -457,6 +459,80 @@
 
     renderWheelLegend(a);
     renderWheelTable(a);
+    if (play.on) updatePlayheadDom(a);
+  }
+
+  /* ---------- silent cycle playhead ---------- */
+
+  function ensurePlayheadGroup() {
+    var svg = $('wheelSvg');
+    var g = document.getElementById('playheadG');
+    if (g) return g;
+    g = svgEl('g', { id: 'playheadG', className: 'wheel-playhead' });
+    g.appendChild(svgEl('line', { id: 'playLine', x1: 210, y1: 210, x2: 210, y2: 20 }));
+    g.appendChild(svgEl('circle', { id: 'playDot', cx: 210, cy: 20, r: 5.5 }));
+    svg.appendChild(g);
+    return g;
+  }
+
+  function updatePlayheadDom(a) {
+    ensurePlayheadGroup();
+    var theta = (play.step / a.cycleSteps) * Math.PI * 2 - Math.PI / 2;
+    var x2 = 210 + Math.cos(theta) * 190;
+    var y2 = 210 + Math.sin(theta) * 190;
+    var line = document.getElementById('playLine');
+    line.setAttribute('x2', x2.toFixed(2));
+    line.setAttribute('y2', y2.toFixed(2));
+    var dot = document.getElementById('playDot');
+    dot.setAttribute('cx', x2.toFixed(2));
+    dot.setAttribute('cy', y2.toFixed(2));
+    var voices = 0;
+    var names = [];
+    a.tracks.forEach(function (t) {
+      if (t.expanded[play.step] === 1) { voices++; names.push(t.name); }
+    });
+    var coincident = a.coincidenceSteps && a.coincidenceSteps.indexOf(play.step) !== -1;
+    $('playStatus').textContent = 'Step ' + (play.step + 1) + ' of ' + a.cycleSteps + ' - ' +
+      voices + ' voice' + (voices === 1 ? '' : 's') + ' sounding' +
+      (names.length ? ' (' + names.join(', ') + ')' : '') +
+      (coincident ? ' - coincidence step' : '');
+  }
+
+  function playTick(now) {
+    if (!play.on) return;
+    var a = state.analysis;
+    if (!a) { stopPlay(); return; }
+    var dt = Math.max(0, (now - play.last) / 1000);
+    play.last = now;
+    play.carry += dt / a.secondsPerStep;
+    var adv = Math.floor(play.carry);
+    if (adv > 0) {
+      play.carry -= adv;
+      play.step = (play.step + adv) % a.cycleSteps;
+      updatePlayheadDom(a);
+    }
+    requestAnimationFrame(playTick);
+  }
+
+  function startPlay() {
+    if (!state.analysis) return;
+    play.on = true;
+    play.step = 0;
+    play.carry = 0;
+    play.last = performance.now();
+    $('cyclePlayBtn').textContent = 'Stop cycle';
+    $('cyclePlayBtn').setAttribute('aria-pressed', 'true');
+    updatePlayheadDom(state.analysis);
+    requestAnimationFrame(playTick);
+  }
+
+  function stopPlay() {
+    play.on = false;
+    var g = document.getElementById('playheadG');
+    if (g) g.parentNode.removeChild(g);
+    $('playStatus').textContent = '';
+    $('cyclePlayBtn').textContent = 'Run cycle';
+    $('cyclePlayBtn').setAttribute('aria-pressed', 'false');
   }
 
   function renderWheelLegend(a) {
@@ -830,6 +906,11 @@
     });
 
     $('printBtn').addEventListener('click', function () { window.print(); });
+
+    $('cyclePlayBtn').addEventListener('click', function () {
+      if (play.on) stopPlay();
+      else startPlay();
+    });
 
     $('wheelTableBtn').addEventListener('click', function () {
       $('wheelTableWrap').hidden = false;

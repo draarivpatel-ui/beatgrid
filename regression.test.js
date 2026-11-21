@@ -179,3 +179,18 @@ test('score and session exports reject fractional tempo and malformed byte array
     assert.throws(() => R.describeMidiChunks(bytes));
   }
 });
+
+test('odd and coarse step grids keep deterministic metrical weights', () => {
+  assert.equal(R.metricalWeight(0, 3), 4);
+  assert.equal(R.metricalWeight(3, 3), 3);
+  assert.equal(R.metricalWeight(1, 3), 1);
+  assert.equal(R.metricalWeight(6, 3), 3);
+  assert.equal(R.metricalWeight(1, 2), 2);
+  assert.equal(R.metricalWeight(0, 2), 4);
+});
+
+test('fractional step ticks still produce a complete MIDI stream', () => {
+  const bytes = R.encodeMidiFile([{ name: 'x', pulses: 3, steps: 7, note: 38 }], 120, { ppq: 24, stepsPerBeat: 7 });
+  assert.equal(new TextDecoder().decode(bytes.slice(0, 4)), 'MThd');
+  assert.deepEqual(Array.from(bytes.slice(-3)), [0xff, 0x2f, 0x00]);
+});

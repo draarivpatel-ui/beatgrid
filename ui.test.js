@@ -99,3 +99,30 @@ test('oversized cycle imports reject before changing a valid session', () => {
   assert.equal(page.get('statCycle').textContent, '72');
   assert.equal(page.get('downloadMidiBtn').disabled, false);
 });
+
+test('silent cycle playhead sweeps the wheel at session tempo', () => {
+  const page = createPage(__dirname);
+  page.get('cyclePlayBtn').click();
+  assert.equal(page.get('cyclePlayBtn').textContent, 'Stop cycle');
+  assert.equal(page.get('cyclePlayBtn').getAttribute('aria-pressed'), 'true');
+  assert.ok(page.get('wheelSvg').querySelector('#playheadG'));
+  assert.match(page.get('playStatus').textContent, /Step 1 of 72 - 3 voices sounding/);
+  assert.match(page.get('playStatus').textContent, /coincidence step/);
+  const x0 = page.get('wheelSvg').querySelector('#playLine').getAttribute('x2');
+  page.flushFrame(125); // one step at 120 bpm with four steps per beat
+  assert.match(page.get('playStatus').textContent, /Step 2 of 72/);
+  assert.notEqual(page.get('wheelSvg').querySelector('#playLine').getAttribute('x2'), x0);
+  for (let index = 0; index < 71; index++) page.flushFrame(125);
+  assert.match(page.get('playStatus').textContent, /Step 1 of 72/); // wraps to the cycle start
+  page.get('bpm').value = '150';
+  page.fire(page.get('bpm'), 'input');
+  assert.ok(page.get('wheelSvg').querySelector('#playheadG')); // playhead survives a re-render
+  page.get('cyclePlayBtn').click();
+  assert.equal(page.get('cyclePlayBtn').textContent, 'Run cycle');
+  assert.equal(page.get('cyclePlayBtn').getAttribute('aria-pressed'), 'false');
+  assert.equal(page.get('wheelSvg').querySelector('#playheadG'), null);
+  assert.equal(page.get('playStatus').textContent, '');
+  page.flushFrame(500);
+  assert.equal(page.get('playStatus').textContent, '');
+  auditPage(page);
+});
