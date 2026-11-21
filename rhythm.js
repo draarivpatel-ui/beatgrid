@@ -382,32 +382,219 @@
    * sort in exact lexicographical UTF-16 order: "10" precedes "2".
    */
   function canonicalJson(value) {
-    if (value === undefined || typeof value === 'function' || typeof value === 'symbol') {
-      throw new TypeError('canonical JSON needs a JSON value');
-    }
-    return writeCanonical(value);
+    var text = writeResolved(resolveMember({ '': value }, ''), new JsonSet());
+    if (text === undefined) throw new JsonTypeError('canonical JSON needs a JSON value');
+    return text;
   }
 
-  function writeCanonical(value) {
-    if (value === null || typeof value !== 'object') return JSON.stringify(value);
-    if (typeof value.toJSON === 'function') return writeCanonical(value.toJSON());
-    if (Array.isArray(value)) {
-      var cells = new Array(value.length);
-      for (var i = 0; i < value.length; i++) {
-        var cell = value[i];
-        cells[i] = (cell === undefined || typeof cell === 'function' || typeof cell === 'symbol') ? 'null' : writeCanonical(cell);
+  /*
+   * SerializeJSONProperty from ECMA-262: the member is read, its toJSON is
+   * resolved exactly once with the member's key and the member object as
+   * receiver, boxed primitives are unwrapped, and only then does the type
+   * dispatch run. A member whose serialization comes back undefined is
+   * omitted from objects and becomes null inside arrays, so the emitted
+   * text is always valid JSON.
+   */
+  function resolveMember(holder, key) {
+    var value = holder[key];
+    if (value !== null && (typeof value === 'object' || typeof value === 'function' || typeof value === 'bigint')) {
+      var toJSON = value.toJSON;
+      if (typeof toJSON === 'function') value = jsonApply(toJSON, value, [key]);
+    }
+    if (typeof value === 'object' && value !== null) value = unboxJsonWrapper(value);
+    return value;
+  }
+
+  /*
+   * Number, String, Boolean, BigInt and Symbol wrapper objects serialize as
+   * their wrapped primitive. The internal slot is probed by the built-in
+   * valueOf methods captured at load: they read the slot itself and throw
+   * on receivers that lack it, so fake wrappers, proxies, forged
+   * @@toStringTag values, replaced prototype methods and cross-realm
+   * objects all resolve exactly as the spec's slot check does. Number and
+   * String then convert through the ordinary primitive protocol,
+   * honouring overridden valueOf and toString like ToNumber and ToString
+   * do; Boolean, BigInt and Symbol read the slot straight from the probe
+   * result.
+   */
+  var jsonNumberValueOf = Number.prototype.valueOf;
+  var jsonStringValueOf = String.prototype.valueOf;
+  var jsonBooleanValueOf = Boolean.prototype.valueOf;
+  var jsonBigIntValueOf = typeof BigInt === 'function' ? BigInt.prototype.valueOf : null;
+  var jsonSymbolValueOf = typeof Symbol === 'function' ? Symbol.prototype.valueOf : null;
+  var jsonToPrimitive = typeof Symbol === 'function' ? Symbol.toPrimitive : undefined;
+  /*
+   * Invocation and platform helpers are captured too: "fn.call(...)"
+   * reads the "call" property off the callable, so an own or polluted
+   * call property would hijack every method invocation the serializer
+   * performs. Reflect.apply invokes [[Call]] directly like the spec's
+   * Call(), and the captured copies stay immune to prototype tampering
+   * after load.
+   */
+  var jsonApply = Reflect.apply;
+  var jsonStringify = JSON.stringify;
+  var jsonIsRawJSON = typeof JSON.isRawJSON === 'function' ? JSON.isRawJSON : null;
+  var jsonObjectKeys = Object.keys;
+  var jsonIsArray = Array.isArray;
+  var JsonSet = Set;
+  var jsonSetHas = Set.prototype.has;
+  var jsonSetAdd = Set.prototype.add;
+  var jsonSetDelete = Set.prototype.delete;
+  var jsonArraySort = Array.prototype.sort;
+  var jsonArrayJoin = Array.prototype.join;
+  var jsonArrayPush = Array.prototype.push;
+  var jsonArrayPop = Array.prototype.pop;
+  var JsonString = String;
+  var JsonNumber = Number;
+  var jsonIsNaN = Number.isNaN;
+  var jsonTrunc = Math.trunc;
+  var jsonMin = Math.min;
+  var JsonTypeError = TypeError;
+  function unboxJsonWrapper(value) {
+    var probe = trySlot(value, jsonNumberValueOf);
+    if (probe.found) {
+      var num = toJsonPrimitive(value, 'number');
+      if (typeof num === 'bigint') throw new JsonTypeError('canonical JSON cannot serialize a BigInt');
+      return JsonNumber(num);
+    }
+    probe = trySlot(value, jsonStringValueOf);
+    if (probe.found) {
+      var str = toJsonPrimitive(value, 'string');
+      if (typeof str === 'symbol') throw new JsonTypeError('canonical JSON cannot serialize a Symbol');
+      return JsonString(str);
+    }
+    probe = trySlot(value, jsonBooleanValueOf);
+    if (probe.found) return probe.primitive;
+    if (jsonBigIntValueOf !== null) {
+      probe = trySlot(value, jsonBigIntValueOf);
+      if (probe.found) return probe.primitive;
+    }
+    if (jsonSymbolValueOf !== null) {
+      probe = trySlot(value, jsonSymbolValueOf);
+      if (probe.found) return probe.primitive;
+    }
+    return value;
+  }
+
+  function trySlot(value, method) {
+    try {
+      return { found: true, primitive: jsonApply(method, value, []) };
+    } catch (err) {
+      return { found: false };
+    }
+  }
+
+  function toJsonPrimitive(value, hint) {
+    // ToPrimitive consults a @@toPrimitive method before the ordinary
+    // valueOf/toString pair: a callable exotic method receives the hint and
+    // wins outright, while a non-callable value or an object result throws.
+    if (jsonToPrimitive !== undefined) {
+      var exotic = value[jsonToPrimitive];
+      if (exotic !== undefined && exotic !== null) {
+        if (typeof exotic !== 'function') {
+          throw new JsonTypeError('canonical JSON cannot convert an object to a primitive value');
+        }
+        var prim = jsonApply(exotic, value, [hint]);
+        if (prim !== null && (typeof prim === 'object' || typeof prim === 'function')) {
+          throw new JsonTypeError('canonical JSON cannot convert an object to a primitive value');
+        }
+        return prim;
       }
-      return '[' + cells.join(',') + ']';
     }
-    var keys = Object.keys(value).sort(function (a, b) { return a < b ? -1 : a > b ? 1 : 0; });
-    var pairs = [];
-    for (var j = 0; j < keys.length; j++) {
-      var key = keys[j];
-      var member = value[key];
-      if (member === undefined || typeof member === 'function' || typeof member === 'symbol') continue;
-      pairs.push(JSON.stringify(key) + ':' + writeCanonical(member));
+    var methods = hint === 'string' ? ['toString', 'valueOf'] : ['valueOf', 'toString'];
+    for (var i = 0; i < methods.length; i += 1) {
+      var method = value[methods[i]];
+      if (typeof method === 'function') {
+        var result = jsonApply(method, value, []);
+        if (result === null || (typeof result !== 'object' && typeof result !== 'function')) {
+          return result;
+        }
+      }
     }
-    return '{' + pairs.join(',') + '}';
+    throw new JsonTypeError('canonical JSON cannot convert an object to a primitive value');
+  }
+
+  /* ToLength from ECMA-262: integer truncation clamped to [0, 2^53 - 1]. */
+  function toJsonArrayLength(len) {
+    if (typeof len === 'bigint') throw new JsonTypeError('canonical JSON cannot serialize a BigInt');
+    var n = jsonTrunc(JsonNumber(len));
+    if (jsonIsNaN(n) || n < 0) return 0;
+    return jsonMin(n, 9007199254740991);
+  }
+
+  /*
+   * Objects and arrays expand iteratively through an explicit frame list,
+   * so nesting depth is bounded by memory rather than the call stack and
+   * circular values are rejected through the ancestor set. Array frames
+   * capture length once through ToLength like SerializeJSONArray, so a
+   * toJSON or getter that mutates it mid-write can never leave holes or
+   * trailing commas; object keys are snapshotted once up front.
+   */
+  function writeResolved(value, ancestors) {
+    var frames = [];
+    for (;;) {
+      var text;
+      var opened = false;
+      if (value === null) {
+        text = 'null';
+      } else {
+        var type = typeof value;
+        if (type === 'string' || type === 'number' || type === 'boolean') {
+          text = jsonStringify(value);
+        } else if (type === 'bigint') {
+          throw new JsonTypeError('canonical JSON cannot serialize a BigInt');
+        } else if (type === 'undefined' || type === 'function' || type === 'symbol') {
+          text = undefined;
+        } else if (jsonIsRawJSON !== null && jsonIsRawJSON(value)) {
+          // [[IsRawJSON]] values emit their rawJSON text verbatim.
+          text = value.rawJSON;
+        } else {
+          if (jsonApply(jsonSetHas, ancestors, [value])) {
+            throw new JsonTypeError('canonical JSON cannot serialize a circular structure');
+          }
+          jsonApply(jsonSetAdd, ancestors, [value]);
+          var frame;
+          if (jsonIsArray(value)) {
+            frame = { obj: value, keys: null, len: toJsonArrayLength(value.length), index: 0, parts: [] };
+          } else {
+            var keys = jsonObjectKeys(value);
+            jsonApply(jsonArraySort, keys, [function (a, b) { return a < b ? -1 : a > b ? 1 : 0; }]);
+            frame = { obj: value, keys: keys, len: keys.length, index: 0, parts: [] };
+          }
+          jsonApply(jsonArrayPush, frames, [frame]);
+          opened = true;
+        }
+      }
+      if (opened) {
+        var current = frames[frames.length - 1];
+        var hasFirst = current.index < current.len;
+        if (hasFirst) {
+          value = resolveMember(current.obj, current.keys ? current.keys[current.index] : JsonString(current.index));
+          continue;
+        }
+        text = current.keys ? '{}' : '[]';
+        jsonApply(jsonArrayPop, frames, []);
+        jsonApply(jsonSetDelete, ancestors, [current.obj]);
+      }
+      for (;;) {
+        if (frames.length === 0) return text;
+        var top = frames[frames.length - 1];
+        if (top.keys) {
+          if (text !== undefined) jsonApply(jsonArrayPush, top.parts, [jsonStringify(top.keys[top.index]) + ':' + text]);
+        } else {
+          jsonApply(jsonArrayPush, top.parts, [text === undefined ? 'null' : text]);
+        }
+        top.index += 1;
+        var hasNext = top.index < top.len;
+        if (hasNext) {
+          value = resolveMember(top.obj, top.keys ? top.keys[top.index] : JsonString(top.index));
+          break;
+        }
+        text = (top.keys ? '{' : '[') + jsonApply(jsonArrayJoin, top.parts, [',']) + (top.keys ? '}' : ']');
+        jsonApply(jsonArrayPop, frames, []);
+        jsonApply(jsonSetDelete, ancestors, [top.obj]);
+      }
+    }
   }
 
   /*

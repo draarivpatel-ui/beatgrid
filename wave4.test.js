@@ -275,3 +275,275 @@ test('canonicalJson output stays byte identical across calls and safe on odd tre
   assert.equal(R.canonicalJson(value), R.canonicalJson(value));
   assert.equal(R.canonicalJson(value), '{"__proto__":[1,2],"a":1,"z":{"__proto__":0}}');
 });
+
+test('canonicalJson drops members whose toJSON resolves to an unserializable value', () => {
+  for (const bad of [undefined, () => 1, Symbol('x')]) {
+    const text = R.canonicalJson({ a: { toJSON() { return bad; } }, b: 2 });
+    assert.equal(text, '{"b":2}');
+    assert.deepEqual(JSON.parse(text), { b: 2 });
+  }
+  assert.equal(R.canonicalJson({ a: { toJSON() { return undefined; } }, b: 2 }), JSON.stringify({ a: { toJSON() { return undefined; } }, b: 2 }));
+  assert.throws(() => R.canonicalJson({ toJSON() { return undefined; } }), TypeError);
+});
+
+test('canonicalJson writes null for array cells whose toJSON resolves to an unserializable value', () => {
+  for (const bad of [undefined, () => 1, Symbol('x')]) {
+    const text = R.canonicalJson([1, { toJSON() { return bad; } }, 3]);
+    assert.equal(text, '[1,null,3]');
+    assert.deepEqual(JSON.parse(text), [1, null, 3]);
+  }
+  assert.equal(R.canonicalJson([NaN, Infinity, -Infinity, undefined]), '[null,null,null,null]');
+});
+
+test('canonicalJson resolves toJSON once per member with the member key, then sorts result keys', () => {
+  const seen = [];
+  const value = {
+    z: { toJSON(key) { seen.push(key); return { '2': 2, '10': 10 }; } },
+    a: [{ toJSON(key) { seen.push(key); return 'k' + key; } }]
+  };
+  assert.equal(R.canonicalJson(value), '{"a":["k0"],"z":{"10":10,"2":2}}');
+  assert.deepEqual([...seen].sort(), ['0', 'z']);
+  // A toJSON result's own toJSON is not consulted again (ECMA-262 resolves it once).
+  assert.equal(R.canonicalJson({ a: { toJSON() { return { toJSON() { return 9; }, x: 5 }; } } }), '{"a":{"x":5}}');
+});
+
+test('canonicalJson unboxes Number, String, Boolean, and Date objects like JSON.stringify', () => {
+  const text = R.canonicalJson({ a: new Number(3), b: new String('hi'), c: new Boolean(true), d: new Number(NaN) });
+  assert.equal(text, '{"a":3,"b":"hi","c":true,"d":null}');
+  assert.equal(R.canonicalJson(new Date('2026-01-02T03:04:05.000Z')), '"2026-01-02T03:04:05.000Z"');
+});
+
+test('canonicalJson rejects BigInt values and circular structures with a TypeError', () => {
+  assert.throws(() => R.canonicalJson({ a: 10n }), TypeError);
+  assert.throws(() => R.canonicalJson([10n]), TypeError);
+  assert.throws(() => R.canonicalJson({ toJSON() { return 10n; } }), TypeError);
+  const circ = { a: {} };
+  circ.a.b = circ.a;
+  assert.throws(() => R.canonicalJson(circ), TypeError);
+  const self = { toJSON() { return circ; } };
+  assert.throws(() => R.canonicalJson(self), TypeError);
+  assert.throws(() => R.canonicalJson({ a: { toJSON() { return circ; } } }), TypeError);
+});
+
+test('canonicalJson output is always valid JSON for JSON.stringify round trips', () => {
+  const values = [
+    { a: { toJSON() { return undefined; } }, b: 2 },
+    [{ toJSON() { return undefined; } }, new Date('2026-11-21T00:00:00.000Z')],
+    { n: new Number(7), s: new String('x'), ok: new Boolean(false), d: new Date(0) },
+    { deep: [{ toJSON() { return { '9': 9, '10': 10 }; } }, NaN, Infinity] },
+    { f: () => 1, s: Symbol('y'), u: undefined, keep: 'yes' }
+  ];
+  for (const value of values) {
+    const text = R.canonicalJson(value);
+    assert.equal(typeof text, 'string');
+    const expected = JSON.parse(JSON.stringify(value));
+    const sortDeep = (node) => Array.isArray(node)
+      ? node.map(sortDeep)
+      : (node && typeof node === 'object'
+        ? Object.fromEntries(Object.keys(node).sort().map((k) => [k, sortDeep(node[k])]))
+        : node);
+    assert.deepEqual(JSON.parse(text), sortDeep(expected));
+  }
+});
+
+test('canonicalJson captures array length once so mid-write mutation never corrupts the output', () => {
+  let a = [{ toJSON() { a.length = 1; return 9; } }, 2, 3];
+  let text = R.canonicalJson(a);
+  assert.equal(text, '[9,null,null]');
+  assert.deepEqual(JSON.parse(text), [9, null, null]);
+
+  a = [{ toJSON() { a.push('new'); return 9; } }, 2, 3];
+  text = R.canonicalJson(a);
+  assert.equal(text, '[9,2,3]');
+  assert.deepEqual(JSON.parse(text), [9, 2, 3]);
+
+  for (const fakeLength of ['abc', {}, 2.5, -1, 0, '5']) {
+    const proxy = new Proxy([1, 2, 3], { get: (t, k) => (k === 'length' ? fakeLength : t[k]) });
+    text = R.canonicalJson(proxy);
+    assert.equal(text, JSON.stringify(proxy));
+    assert.doesNotThrow(() => JSON.parse(text));
+  }
+
+  a = [1, 2, 3];
+  let reads = 0;
+  Object.defineProperty(a, 1, {
+    enumerable: true,
+    get() { reads += 1; return reads === 1 ? (a.length = 2, 'G') : 'G'; }
+  });
+  text = R.canonicalJson(a);
+  assert.equal(text, '[1,"G",null]');
+  assert.doesNotThrow(() => JSON.parse(text));
+});
+
+test('canonicalJson consults toJSON on function values like JSON.stringify does', () => {
+  const f = function () {};
+  f.toJSON = (key) => 'fn-' + key;
+  assert.equal(R.canonicalJson({ a: f, b: 1 }), '{"a":"fn-a","b":1}');
+  assert.equal(R.canonicalJson([1, f, 3]), '[1,"fn-1",3]');
+  assert.equal(R.canonicalJson(f), '"fn-"');
+  f.toJSON = () => ({ z: 1, a: 2 });
+  assert.equal(R.canonicalJson({ k: f }), '{"k":{"a":2,"z":1}}');
+  assert.equal(R.canonicalJson({ a: function () {}, b: 1 }), '{"b":1}');
+});
+
+test('canonicalJson unboxes wrappers by internal slot, not by prototype shape', () => {
+  assert.equal(R.canonicalJson({ a: Object.create(Number.prototype) }), '{"a":{}}');
+  assert.equal(R.canonicalJson({ a: Object.create(String.prototype) }), '{"a":{}}');
+  assert.throws(() => R.canonicalJson({ a: Object.setPrototypeOf(new Number(5), null) }), TypeError);
+  const n = new Number(5);
+  n.valueOf = () => 'str';
+  assert.equal(R.canonicalJson({ a: n }), '{"a":null}');
+  const n2 = new Number(5);
+  n2.valueOf = () => ({ x: 1 });
+  assert.equal(R.canonicalJson({ a: n2 }), '{"a":5}');
+  const s = new String('hi');
+  s.valueOf = () => 'V';
+  assert.equal(R.canonicalJson({ a: s }), '{"a":"hi"}');
+  const b = new Boolean(true);
+  b.valueOf = () => false;
+  assert.equal(R.canonicalJson({ a: b }), '{"a":true}');
+  const vm = require('vm');
+  assert.equal(R.canonicalJson({ n: vm.runInNewContext('new Number(5)') }), '{"n":5}');
+});
+
+test('canonicalJson slot checks survive tag forgery and prototype tampering', () => {
+  const tagged = new Number(5);
+  tagged[Symbol.toStringTag] = 'Foo';
+  assert.equal(R.canonicalJson({ a: tagged }), '{"a":5}');
+  const taggedStr = new String('xy');
+  taggedStr[Symbol.toStringTag] = 'Foo';
+  assert.equal(R.canonicalJson({ a: taggedStr }), '{"a":"xy"}');
+  assert.equal(R.canonicalJson({ a: { [Symbol.toStringTag]: 'Number' } }), '{"a":{}}');
+  assert.equal(R.canonicalJson({ a: { [Symbol.toStringTag]: 'Number', valueOf() { return 42; } } }), '{"a":{}}');
+
+  const boolValueOf = Boolean.prototype.valueOf;
+  Boolean.prototype.valueOf = () => 'x';
+  try {
+    assert.equal(R.canonicalJson({ a: new Boolean(true) }), '{"a":true}');
+  } finally {
+    Boolean.prototype.valueOf = boolValueOf;
+  }
+  const numValueOf = Number.prototype.valueOf;
+  Number.prototype.valueOf = () => 'polluted';
+  try {
+    assert.equal(R.canonicalJson({ a: new Number(5) }), '{"a":null}');
+  } finally {
+    Number.prototype.valueOf = numValueOf;
+  }
+
+  // ToNumber and ToString reject primitives their conversions cannot hold.
+  const big = new Number(5);
+  big.valueOf = () => 10n;
+  assert.throws(() => R.canonicalJson({ a: big }), TypeError);
+  const sym = new String('x');
+  sym.toString = () => Symbol('s');
+  assert.throws(() => R.canonicalJson({ a: sym }), TypeError);
+  const bigLen = new Proxy([1, 2, 3], { get: (t, k) => (k === 'length' ? 5n : t[k]) });
+  assert.throws(() => R.canonicalJson(bigLen), TypeError);
+});
+
+test('canonicalJson honours Symbol.toPrimitive on wrapper unboxing like ToPrimitive', () => {
+  const n = new Number(5);
+  n[Symbol.toPrimitive] = () => 42;
+  assert.equal(R.canonicalJson({ a: n }), '{"a":42}');
+  const s = new String('x');
+  s[Symbol.toPrimitive] = () => 7;
+  assert.equal(R.canonicalJson({ a: s }), '{"a":"7"}');
+  const both = new Number(5);
+  both.valueOf = () => 11;
+  both[Symbol.toPrimitive] = () => 22;
+  assert.equal(R.canonicalJson({ a: both }), '{"a":22}');
+  const hinted = new Number(5);
+  hinted[Symbol.toPrimitive] = (h) => (h === 'number' ? 'numhint' : 'strhint');
+  assert.equal(R.canonicalJson({ a: hinted }), '{"a":null}');
+  class MyNum extends Number { [Symbol.toPrimitive]() { return 33; } }
+  assert.equal(R.canonicalJson({ a: new MyNum(5) }), '{"a":33}');
+
+  const bad = new Number(5);
+  bad[Symbol.toPrimitive] = () => ({});
+  assert.throws(() => R.canonicalJson({ a: bad }), TypeError);
+  const nonCall = new Number(5);
+  nonCall[Symbol.toPrimitive] = 5;
+  assert.throws(() => R.canonicalJson({ a: nonCall }), TypeError);
+  const bigRes = new Number(5);
+  bigRes[Symbol.toPrimitive] = () => 10n;
+  assert.throws(() => R.canonicalJson({ a: bigRes }), TypeError);
+  const symRes = new String('x');
+  symRes[Symbol.toPrimitive] = () => Symbol('s');
+  assert.throws(() => R.canonicalJson({ a: symRes }), TypeError);
+});
+
+test('canonicalJson invokes methods through Call(), not a forgeable call property', () => {
+  const exotic = () => 42;
+  exotic.call = () => 'forged';
+  const n = new Number(5);
+  n[Symbol.toPrimitive] = exotic;
+  assert.equal(R.canonicalJson({ a: n }), '{"a":42}');
+  const toJson = () => ({ real: 1 });
+  toJson.call = () => ({ forged: true });
+  assert.equal(R.canonicalJson({ a: { toJSON: toJson } }), '{"a":{"real":1}}');
+  const valueOf = () => 111;
+  valueOf.call = () => 'forged';
+  const n2 = new Number(5);
+  n2.valueOf = valueOf;
+  assert.equal(R.canonicalJson({ a: n2 }), '{"a":111}');
+  const realCall = Function.prototype.call;
+  Function.prototype.call = function () { return 'forged'; };
+  try {
+    assert.equal(R.canonicalJson({ a: new Number(5) }), '{"a":5}');
+    assert.equal(R.canonicalJson({ a: { x: 1 } }), '{"a":{"x":1}}');
+    assert.equal(R.canonicalJson([1, 2]), '[1,2]');
+  } finally {
+    Function.prototype.call = realCall;
+  }
+});
+
+test('canonicalJson survives platform method tampering after load', () => {
+  const origSort = Array.prototype.sort;
+  Array.prototype.sort = () => [];
+  try {
+    assert.equal(R.canonicalJson({ b: 1, a: 2 }), '{"a":2,"b":1}');
+  } finally {
+    Array.prototype.sort = origSort;
+  }
+  const origJoin = Array.prototype.join;
+  Array.prototype.join = () => 'PWN';
+  try {
+    assert.equal(R.canonicalJson({ a: 1, b: 2 }), '{"a":1,"b":2}');
+    assert.equal(R.canonicalJson([1, 2]), '[1,2]');
+  } finally {
+    Array.prototype.join = origJoin;
+  }
+  const origSetHas = Set.prototype.has;
+  Set.prototype.has = () => true;
+  try {
+    assert.equal(R.canonicalJson({ a: 1 }), '{"a":1}', 'polluted Set.has cannot forge a circular hit');
+  } finally {
+    Set.prototype.has = origSetHas;
+  }
+  const origStringify = JSON.stringify;
+  JSON.stringify = () => 'PWN';
+  try {
+    assert.equal(R.canonicalJson({ q: 'a"b' }), '{"q":"a\\"b"}');
+  } finally {
+    JSON.stringify = origStringify;
+  }
+});
+
+test('canonicalJson emits rawJSON text verbatim like the IsRawJSON slot', () => {
+  if (typeof JSON.rawJSON !== 'function') return;
+  assert.equal(R.canonicalJson({ x: JSON.rawJSON('123') }), '{"x":123}');
+  assert.equal(R.canonicalJson([JSON.rawJSON('"s"'), 1]), '["s",1]');
+  assert.equal(R.canonicalJson({ x: { toJSON: () => JSON.rawJSON('null') } }), '{"x":null}');
+  assert.equal(R.canonicalJson({ x: { rawJSON: '123' } }), '{"x":{"rawJSON":"123"}}',
+    'a plain object with a rawJSON property is not a slot holder');
+});
+
+test('canonicalJson serializes nesting far deeper than the call stack', () => {
+  let value = 1;
+  for (let i = 0; i < 100000; i += 1) value = [value];
+  const text = R.canonicalJson(value);
+  assert.equal(text.length, 200001);
+  assert.equal(text[0], '[');
+  assert.equal(text[text.length - 1], ']');
+});
