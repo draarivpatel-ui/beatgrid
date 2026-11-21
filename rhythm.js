@@ -16,7 +16,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  var VERSION = '1.0.0';
+  var VERSION = '1.1.0';
   var DEFAULT_STEPS_PER_BEAT = 4;
   var DEFAULT_PPQ = 480;
   var DEFAULT_BPM = 120;
@@ -253,6 +253,63 @@
     return d;
   }
 
+  /*
+   * Step evenness in [0, 1]. Inter-onset gaps are compared to the ideal gap
+   * n/k; the sum of absolute deviations is normalized against the worst
+   * packing of the same density (k-1 unit gaps and one long gap). A score of
+   * 1 is reached only when every gap equals n/k, which needs k to divide n.
+   * Maximally even vectors still score the maximum available for their
+   * density when n/k is fractional.
+   */
+  function evennessIndex(pattern) {
+    var vector = binaryPattern(pattern);
+    var positions = [];
+    vector.forEach(function (value, index) { if (value) positions.push(index); });
+    var k = positions.length;
+    if (k === 0) return 0;
+    var n = vector.length;
+    // Integer-scaled deviation: sum of |gap*k - n| equals k times the sum of
+    // |gap - n/k|, so the score is exact and identical under rotation.
+    var scaled = 0;
+    for (var i = 0; i < k; i++) {
+      var gap = ((positions[(i + 1) % k] - positions[i] + n) % n) || n;
+      scaled += Math.abs(gap * k - n);
+    }
+    var worst = 2 * (k - 1) * (n - k);
+    if (worst === 0) return 1;
+    return Math.min(1, Math.max(0, 1 - scaled / worst));
+  }
+
+  /*
+   * Booth's least-rotation algorithm. Returns the index whose left rotation
+   * produces the lexicographically smallest cyclic form of the vector, which
+   * is a canonical representative shared by every rotation of the pattern.
+   */
+  function canonicalRotation(pattern) {
+    var vector = binaryPattern(pattern);
+    var n = vector.length;
+    if (n < 2) return 0;
+    var i = 0;
+    var j = 1;
+    var k = 0;
+    while (i < n && j < n && k < n) {
+      var a = vector[(i + k) % n];
+      var b = vector[(j + k) % n];
+      if (a === b) { k++; continue; }
+      if (a > b) i = i + k + 1;
+      else j = j + k + 1;
+      if (i === j) i++;
+      k = 0;
+    }
+    return Math.min(i, j) % n;
+  }
+
+  function canonicalVector(pattern) {
+    var vector = binaryPattern(pattern);
+    var shift = canonicalRotation(vector);
+    return vector.slice(shift).concat(vector.slice(0, shift));
+  }
+
   function inspectPattern(pattern) {
     var vector = binaryPattern(pattern);
     var positions = [];
@@ -270,7 +327,8 @@
     return {
       steps: vector.length, onsets: positions.length, density: positions.length / vector.length,
       positions: positions, gaps: gaps, fundamentalPeriod: period,
-      gapSpread: gaps.length ? Math.max.apply(null, gaps) - Math.min.apply(null, gaps) : 0
+      gapSpread: gaps.length ? Math.max.apply(null, gaps) - Math.min.apply(null, gaps) : 0,
+      evenness: evennessIndex(vector)
     };
   }
 
@@ -311,6 +369,126 @@
     if (typeof text !== 'string') throw new TypeError('session import needs JSON text');
     if (text.length > 131072) throw new RangeError('session JSON exceeds 128 KiB');
     return validateSession(JSON.parse(text));
+  }
+
+  /* ---------- canonical JSON and pattern descriptors ---------- */
+
+  /*
+   * Deterministic JSON: object keys serialize in sorted order at every
+   * depth, array order is preserved, and insignificant whitespace is
+   * removed. Equal inputs always produce identical bytes.
+   */
+  function sortForJson(value) {
+    if (Array.isArray(value)) {
+      var out = new Array(value.length);
+      for (var i = 0; i < value.length; i++) out[i] = sortForJson(value[i]);
+      return out;
+    }
+    if (value && typeof value === 'object') {
+      var keys = Object.keys(value).sort();
+      var out = {};
+      for (var j = 0; j < keys.length; j++) out[keys[j]] = sortForJson(value[keys[j]]);
+      return out;
+    }
+    return value;
+  }
+
+  function canonicalJson(value) {
+    if (value === undefined || typeof value === 'function' || typeof value === 'symbol') {
+      throw new TypeError('canonical JSON needs a JSON value');
+    }
+    return JSON.stringify(sortForJson(value));
+  }
+
+  /*
+   * A pattern descriptor is a self contained record of one binary onset
+   * vector: how it was generated, its exact vector, its canonical least
+   * rotation, and its measured properties. Two vectors that are rotations
+   * of one another share the same canonicalVector and canonicalShift
+   * targets, so the descriptor doubles as a rotation aware equality check.
+   */
+  function describePattern(trackOrPattern, options) {
+    var opts = options || {};
+    var track;
+    if (Array.isArray(trackOrPattern)) {
+      track = normalizeTracks([{ pattern: trackOrPattern }])[0];
+    } else {
+      track = normalizeTracks([trackOrPattern])[0];
+    }
+    var spb = opts.stepsPerBeat === undefined ? DEFAULT_STEPS_PER_BEAT : assertInteger(opts.stepsPerBeat, 'stepsPerBeat');
+    if (spb < 1 || spb > 16) throw new RangeError('stepsPerBeat must be between 1 and 16');
+    var info = inspectPattern(track.pattern);
+    var shift = canonicalRotation(track.pattern);
+    var score = syncopationIndex(track.pattern, spb);
+    var evaluatedSteps = lcm(info.steps, spb * 4);
+    var evaluatedOnsets = info.onsets * evaluatedSteps / info.steps;
+    var descriptor = {
+      schema: 'beatgrid/pattern',
+      version: 1,
+      name: opts.name === undefined ? track.name : safeText(opts.name, track.name, 40),
+      generator: Array.isArray(trackOrPattern) || (trackOrPattern && trackOrPattern.pattern !== undefined) ? 'manual' : 'bjorklund',
+      steps: info.steps,
+      onsets: info.onsets,
+      density: info.density,
+      vector: track.pattern.join(''),
+      canonicalVector: canonicalVector(track.pattern).join(''),
+      canonicalShift: shift,
+      gaps: info.gaps,
+      gapSpread: info.gapSpread,
+      evenness: info.evenness,
+      fundamentalPeriod: info.fundamentalPeriod,
+      syncopation: {
+        score: score,
+        normalized: evaluatedOnsets === 0 ? 0 : score / evaluatedOnsets,
+        evaluatedSteps: evaluatedSteps,
+        evaluatedOnsets: evaluatedOnsets,
+        stepsPerBeat: spb
+      }
+    };
+    if (descriptor.generator === 'bjorklund') {
+      descriptor.pulses = track.pulses;
+      descriptor.rotation = track.rotation;
+    }
+    return descriptor;
+  }
+
+  function exportPattern(trackOrPattern, options) {
+    return canonicalJson(describePattern(trackOrPattern, options));
+  }
+
+  /*
+   * Reads a beatgrid/pattern or beatgrid/pattern-set export back into
+   * normalized manual voices. The embedded vector strings are
+   * authoritative; everything else is recomputed on use so a stale or
+   * edited descriptor still restores the same onset cells it declares.
+   * A single pattern returns one voice object, a set returns an array.
+   */
+  function importPattern(text) {
+    if (typeof text !== 'string') throw new TypeError('pattern import needs JSON text');
+    if (text.length > 65536) throw new RangeError('pattern JSON exceeds 64 KiB');
+    var parsed = JSON.parse(text);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new TypeError('pattern must be an object');
+    if (parsed.schema === 'beatgrid/pattern-set' && parsed.version === 1) {
+      if (!Array.isArray(parsed.patterns) || !parsed.patterns.length) throw new RangeError('pattern set needs at least one pattern');
+      if (parsed.patterns.length > MAX_TRACK_HUES) throw new RangeError('pattern set holds at most ' + MAX_TRACK_HUES + ' patterns');
+      return parsed.patterns.map(readPatternEntry);
+    }
+    if (parsed.schema !== 'beatgrid/pattern' || parsed.version !== 1) throw new TypeError('unsupported BeatGrid pattern schema or version');
+    return readPatternEntry(parsed);
+  }
+
+  function readPatternEntry(entry) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) throw new TypeError('pattern entry must be an object');
+    var pattern;
+    if (typeof entry.vector === 'string') {
+      if (!/^[01]{1,64}$/.test(entry.vector)) throw new RangeError('pattern vector needs 1 to 64 binary cells');
+      pattern = entry.vector.split('').map(function (cell) { return cell === '1' ? 1 : 0; });
+    } else if (Array.isArray(entry.pattern)) {
+      pattern = binaryPattern(entry.pattern);
+    } else {
+      throw new TypeError('pattern needs a vector string or a pattern array');
+    }
+    return { name: safeText(entry.name, 'Pattern', 40), pattern: pattern };
   }
 
   /* ---------- metrical weight and syncopation ---------- */
@@ -386,6 +564,7 @@
       var v = expandPattern(t.pattern, cycleSteps);
       t.expanded = v;
       t.onsets = t.pattern.filter(function (x) { return x === 1; }).length;
+      t.evenness = evennessIndex(t.pattern);
       return v;
     });
 
@@ -437,6 +616,7 @@
         score: score,
         normalized: evaluatedOnsets === 0 ? 0 : score / evaluatedOnsets,
         onsets: t.onsets,
+        evenness: t.evenness,
         evaluatedSteps: evaluatedSteps,
         evaluatedOnsets: evaluatedOnsets
       };
@@ -771,6 +951,13 @@
     normalizeTracks: normalizeTracks,
     expandPattern: expandPattern,
     hammingDistance: hammingDistance,
+    evennessIndex: evennessIndex,
+    canonicalRotation: canonicalRotation,
+    canonicalVector: canonicalVector,
+    canonicalJson: canonicalJson,
+    describePattern: describePattern,
+    exportPattern: exportPattern,
+    importPattern: importPattern,
     inspectPattern: inspectPattern,
     validateSession: validateSession,
     exportSession: exportSession,

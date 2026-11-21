@@ -22,6 +22,7 @@
   };
 
   var play = { on: false, step: 0, carry: 0, last: 0, raf: 0 };
+  var gridFocus = { track: 0, step: 0 };
 
   /* ---------- small DOM helpers ---------- */
 
@@ -199,6 +200,7 @@
           return;
         }
         recompute();
+        announce(preset.name + ' added as voice ' + state.tracks.length);
       });
       row.appendChild(chip);
     });
@@ -206,6 +208,11 @@
 
   function flashNote(message) {
     $('sessionStatus').textContent = message;
+  }
+
+  function announce(message) {
+    var live = $('gridLive');
+    if (live) live.textContent = message;
   }
 
   function readControls() {
@@ -223,9 +230,67 @@
 
   /* ---------- step grid editor ---------- */
 
+  function stepCellAt(trackIndex, step) {
+    var row = $('trackEditor').children[trackIndex];
+    if (!row) return null;
+    var cells = row.querySelectorAll('.step-cell');
+    if (!cells.length) return null;
+    return cells[Math.max(0, Math.min(step, cells.length - 1))];
+  }
+
+  function applyRoving() {
+    var all = $('trackEditor').querySelectorAll('.step-cell');
+    all.forEach(function (cell) { cell.setAttribute('tabindex', '-1'); });
+    var target = stepCellAt(gridFocus.track, gridFocus.step);
+    if (target) target.setAttribute('tabindex', '0');
+  }
+
+  function toggleStep(index, step) {
+    var t = state.tracks[index];
+    if (!t) return;
+    var current = patternFor(t).slice();
+    current[step] = current[step] ? 0 : 1;
+    t.manual = current;
+    recompute();
+    announce(t.name + ' step ' + (step + 1) + ' ' + (current[step] ? 'onset' : 'rest'));
+  }
+
+  function gridKeydown(event, index, step) {
+    var code = event.code || '';
+    var stepsHere = patternFor(state.tracks[index]).length;
+    var next = null;
+    if (code === 'ArrowRight') next = { track: index, step: (step + 1) % stepsHere };
+    else if (code === 'ArrowLeft') next = { track: index, step: (step - 1 + stepsHere) % stepsHere };
+    else if (code === 'ArrowDown') next = { track: Math.min(index + 1, state.tracks.length - 1), step: step };
+    else if (code === 'ArrowUp') next = { track: Math.max(index - 1, 0), step: step };
+    else if (code === 'PageDown') next = { track: state.tracks.length - 1, step: step };
+    else if (code === 'PageUp') next = { track: 0, step: step };
+    else if (code === 'Home') next = { track: index, step: 0 };
+    else if (code === 'End') next = { track: index, step: stepsHere - 1 };
+    else if (code === 'Space' || code === 'Enter') {
+      event.preventDefault();
+      toggleStep(index, step);
+      return;
+    } else {
+      return;
+    }
+    event.preventDefault();
+    var cell = stepCellAt(next.track, next.step);
+    if (cell) cell.focus();
+  }
+
   function renderEditor() {
     var host = $('trackEditor');
+    var refocus = null;
+    var active = document.activeElement;
+    if (active && active.classList && active.classList.contains('step-cell')) {
+      refocus = { track: Number(active.getAttribute('data-track')), step: Number(active.getAttribute('data-step')) };
+    }
     clear(host);
+    if (state.tracks.length) {
+      gridFocus.track = Math.max(0, Math.min(gridFocus.track, state.tracks.length - 1));
+      gridFocus.step = Math.max(0, Math.min(gridFocus.step, patternFor(state.tracks[gridFocus.track]).length - 1));
+    }
     state.tracks.forEach(function (t, index) {
       t.colorSlot = index % MAX_HUE_SLOTS;
       var row = el('div', { className: 'track-row' });
@@ -275,7 +340,11 @@
       } else {
         ident.appendChild(el('span', { className: 'track-formula' }, 'Manual vector, click cells to edit'));
         var reset = el('button', { type: 'button', className: 'btn btn-ghost' }, 'Reset to Euclidean');
-        reset.addEventListener('click', function () { t.manual = null; recompute(); });
+        reset.addEventListener('click', function () {
+          t.manual = null;
+          recompute();
+          announce(t.name + ' restored to ' + formulaFor(t));
+        });
         ident.appendChild(reset);
       }
       row.appendChild(ident);
@@ -289,13 +358,16 @@
           className: 'step-cell' + (value ? ' is-on' : '') + (step % 4 === 0 ? ' is-downbeat' : '') + (step % 4 !== 0 && step % 2 === 0 ? ' is-beat' : ''),
           style: '--cell-color:' + seriesColor(t.colorSlot),
           'aria-label': t.name + ' step ' + (step + 1) + (value ? ' onset' : ' rest'),
-          'aria-pressed': value ? 'true' : 'false'
+          'aria-pressed': value ? 'true' : 'false',
+          tabindex: index === gridFocus.track && step === gridFocus.step ? '0' : '-1',
+          'data-track': index,
+          'data-step': step
         });
-        cell.addEventListener('click', function () {
-          var current = patternFor(t).slice();
-          current[step] = current[step] ? 0 : 1;
-          t.manual = current;
-          recompute();
+        cell.addEventListener('click', function () { toggleStep(index, step); });
+        cell.addEventListener('keydown', function (event) { gridKeydown(event, index, step); });
+        cell.addEventListener('focus', function () {
+          gridFocus = { track: index, step: step };
+          applyRoving();
         });
         cells.appendChild(cell);
       });
@@ -308,13 +380,19 @@
           flashNote('Keep at least one track');
           return;
         }
+        var removedName = t.name;
         state.tracks.splice(index, 1);
         recompute();
+        announce(removedName + ' removed, ' + state.tracks.length + ' voices remain');
       });
       row.appendChild(remove);
       host.appendChild(row);
     });
     $('addTrackBtn').disabled = state.tracks.length >= MAX_TRACKS;
+    if (refocus) {
+      var target = stepCellAt(Math.min(refocus.track, state.tracks.length - 1), refocus.step);
+      if (target) target.focus();
+    }
   }
 
   function numberField(label, value, min, max, onChange) {
@@ -812,7 +890,7 @@
       state.analysis = null;
       state.midi = null;
       state.lily = '';
-      ['downloadMidiBtn', 'downloadLyBtn', 'copyLyBtn', 'exportSessionBtn'].forEach(function (id) { $(id).disabled = true; });
+      ['downloadMidiBtn', 'downloadLyBtn', 'copyLyBtn', 'exportSessionBtn', 'downloadPatternsBtn'].forEach(function (id) { $(id).disabled = true; });
       ['wheelSvg', 'syncSvg', 'coincidenceTable', 'hammingTable', 'syncTable', 'wheelTable', 'chunkTable', 'diagnosticsTable'].forEach(function (id) { clear($(id)); });
       $('wheelSvg').appendChild(svgEl('title', { id: 'wheelTitle' }, 'Phase wheel unavailable'));
       $('wheelSvg').appendChild(svgEl('desc', { id: 'wheelDesc' }, 'Correct the session input to restore the diagram.'));
@@ -824,7 +902,7 @@
       if (!opts.skipEditor) renderEditor();
       return false;
     }
-    ['downloadMidiBtn', 'downloadLyBtn', 'copyLyBtn', 'exportSessionBtn'].forEach(function (id) { $(id).disabled = false; });
+    ['downloadMidiBtn', 'downloadLyBtn', 'copyLyBtn', 'exportSessionBtn', 'downloadPatternsBtn'].forEach(function (id) { $(id).disabled = false; });
     flashNote('Ready. Shared cycle: ' + state.analysis.cycleSteps + ' of ' + R.MAX_CYCLE_STEPS + ' allowed steps.');
     if (!opts.skipEditor) renderEditor();
     renderStats(state.analysis);
@@ -841,13 +919,13 @@
     var table = $('diagnosticsTable');
     clear(table);
     var head = el('tr');
-    ['Voice', 'Onsets / steps', 'Cyclic gaps', 'Shortest repeat', 'Gap spread'].forEach(function (label) { head.appendChild(el('th', { scope: 'col' }, label)); });
+    ['Voice', 'Onsets / steps', 'Cyclic gaps', 'Shortest repeat', 'Gap spread', 'Evenness'].forEach(function (label) { head.appendChild(el('th', { scope: 'col' }, label)); });
     var thead = el('thead'); thead.appendChild(head); table.appendChild(thead);
     var body = el('tbody');
     a.tracks.forEach(function (track) {
       var d = R.inspectPattern(track.pattern);
       var row = el('tr');
-      [track.name, d.onsets + ' / ' + d.steps, d.gaps.length ? d.gaps.join(' + ') : 'No onsets', d.fundamentalPeriod + ' steps', d.gapSpread].forEach(function (value) { row.appendChild(el('td', {}, value)); });
+      [track.name, d.onsets + ' / ' + d.steps, d.gaps.length ? d.gaps.join(' + ') : 'No onsets', d.fundamentalPeriod + ' steps', d.gapSpread, fmt(d.evenness, 3)].forEach(function (value) { row.appendChild(el('td', {}, value)); });
       body.appendChild(row);
     });
     table.appendChild(body);
@@ -857,15 +935,54 @@
     return { schema: 'beatgrid/session', version: 1, title: state.title, bpm: state.bpm, ppq: state.ppq, gate: state.gate, tracks: toEngineTracks() };
   }
 
+  /*
+   * Import is atomic: the workspace only changes after the pasted text has
+   * been fully validated by the engine. Session files replace the voice
+   * list; pattern files add voices. A rejected import leaves the current
+   * session, previews, and exports untouched so work resumes immediately.
+   */
   function importSession() {
+    var text = $('sessionJson').value;
+    if (!text.trim()) {
+      flashNote('Import rejected: paste a session or pattern JSON file first');
+      return;
+    }
+    var parsed;
     try {
-      var session = R.importSession($('sessionJson').value);
+      parsed = JSON.parse(text);
+    } catch (error) {
+      flashNote('Import rejected: ' + error.message);
+      announce('Import rejected');
+      return;
+    }
+    try {
+      if (parsed && (parsed.schema === 'beatgrid/pattern' || parsed.schema === 'beatgrid/pattern-set')) {
+        var imported = R.importPattern(text);
+        var voices = Array.isArray(imported) ? imported : [imported];
+        if (state.tracks.length + voices.length > MAX_TRACKS) {
+          flashNote('Import rejected: ' + voices.length + ' patterns would exceed the ' + MAX_TRACKS + ' voice limit');
+          return;
+        }
+        voices.forEach(addTrack);
+        recompute();
+        $('sessionJson').value = R.exportSession(currentSession());
+        flashNote('Imported ' + voices.length + ' pattern voice' + (voices.length === 1 ? '' : 's') + ' as manual tracks.');
+        announce('Imported ' + voices.length + ' pattern voices');
+        return;
+      }
+      var session = R.importSession(text);
       state.tracks = [];
+      gridFocus = { track: 0, step: 0 };
       session.tracks.forEach(addTrack);
       ['bpm', 'ppq', 'gate', 'title'].forEach(function (id) { $(id).value = session[id]; });
       recompute();
+      $('sessionJson').value = R.exportSession(currentSession());
       flashNote('Imported ' + session.tracks.length + ' voices.');
-    } catch (error) { flashNote('Import rejected: ' + error.message); }
+      announce('Session imported with ' + session.tracks.length + ' voices');
+    } catch (error) {
+      flashNote('Import rejected: ' + error.message);
+      announce('Import rejected');
+    }
   }
 
   /* ---------- theme and toggles ---------- */
@@ -915,6 +1032,7 @@
         return;
       }
       recompute();
+      announce('Voice ' + state.tracks.length + ' added');
     });
 
     $('themeBtn').addEventListener('click', function () {
@@ -976,6 +1094,44 @@
       } else {
         button.textContent = 'Select and copy';
       }
+    });
+
+    $('downloadPatternsBtn').addEventListener('click', function () {
+      if (!state.analysis) return;
+      try {
+        var payload = {
+          schema: 'beatgrid/pattern-set',
+          version: 1,
+          title: state.title,
+          bpm: state.bpm,
+          patterns: toEngineTracks().map(function (track) { return R.describePattern(track); })
+        };
+        var text = R.canonicalJson(payload) + '\n';
+        $('sessionJson').value = text;
+        downloadBlob(new Blob([text], { type: 'application/json' }), safeFilename(state.title + ' patterns', 'json'));
+        flashNote('Canonical pattern JSON exported. Paste it back to restore these voices.');
+      } catch (error) {
+        flashNote('Export rejected: ' + error.message);
+      }
+    });
+
+    window.addEventListener('keydown', function (event) {
+      if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
+      var target = event.target;
+      if (target && target.tagName && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
+      var shortcuts = {
+        KeyP: 'cyclePlayBtn',
+        KeyA: 'addTrackBtn',
+        KeyE: 'exportSessionBtn',
+        KeyM: 'downloadMidiBtn',
+        KeyL: 'downloadLyBtn'
+      };
+      var id = shortcuts[event.code];
+      if (!id) return;
+      var button = $(id);
+      if (!button || button.disabled) return;
+      event.preventDefault();
+      button.click();
     });
 
     window.addEventListener('scroll', hideTooltip, { passive: true });

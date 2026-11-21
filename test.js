@@ -710,10 +710,12 @@ test('the module exposes every documented public function', () => {
     'euclideanRhythm', 'analyzePolyrhythm', 'encodeMidiFile', 'exportLilyPond',
     'vlqEncode', 'vlqDecode', 'hexDump', 'describeMidiChunks', 'normalizeTracks',
     'syncopationIndex', 'hammingDistance', 'metricalWeight', 'expandPattern',
-    'rotateVector', 'gcd', 'lcm', 'lcmAll', 'microsPerQuarter'
+    'rotateVector', 'gcd', 'lcm', 'lcmAll', 'microsPerQuarter',
+    'evennessIndex', 'canonicalRotation', 'canonicalVector', 'canonicalJson',
+    'describePattern', 'exportPattern', 'importPattern'
   ];
   for (const name of names) assert.equal(typeof R[name], 'function', name);
-  assert.equal(R.VERSION, '1.0.0');
+  assert.equal(R.VERSION, '1.1.0');
 });
 
 test('a full preset set analyzes, encodes, and exports without throwing', () => {

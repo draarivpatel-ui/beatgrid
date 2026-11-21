@@ -25,8 +25,8 @@ authors:
 preferred-citation:
   type: software
   title: "BeatGrid"
-  version: "1.0.0"
-  date-released: "2026-11-08"
+  version: "1.1.0"
+  date-released: "2026-11-21"
   license: MIT
   url: "https://aariv.me/beatgrid/"
   authors:

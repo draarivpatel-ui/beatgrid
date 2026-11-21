@@ -119,9 +119,22 @@
       <button type="button" id="addTrackBtn" class="btn btn-primary">Add voice</button>
     </div>
     <div id="trackEditor" class="track-editor"></div>
+    <p id="gridLive" class="sr-only" role="status" aria-live="polite"></p>
     <p class="hint" id="gridHint">
-      Each row displays one full period for that voice. Downbeats carry an engraved left index rule.
+      Each row displays one full period for that voice. Downbeats carry an engraved left index rule. Arrow keys move between pads and Space toggles the focused pad.
     </p>
+    <details class="shortcuts">
+      <summary>Keyboard shortcuts</summary>
+      <ul>
+        <li><kbd>&larr;</kbd> <kbd>&rarr;</kbd> <kbd>&uarr;</kbd> <kbd>&darr;</kbd> move focus between pads, wrapping along a row</li>
+        <li><kbd>Home</kbd> and <kbd>End</kbd> jump to the first and last pad in a row</li>
+        <li><kbd>Page Up</kbd> and <kbd>Page Down</kbd> jump between the first and last voice</li>
+        <li><kbd>Space</kbd> or <kbd>Enter</kbd> toggles the focused pad into a manual edit</li>
+        <li><kbd>P</kbd> runs or stops the silent cycle playhead</li>
+        <li><kbd>A</kbd> adds a voice, <kbd>E</kbd> downloads the session JSON</li>
+        <li><kbd>M</kbd> downloads the MIDI file, <kbd>L</kbd> downloads the LilyPond source</li>
+      </ul>
+    </details>
   </section>
 
   <section class="panel" aria-labelledby="diagnosticsHeading">
@@ -135,12 +148,13 @@
   <section class="panel" aria-labelledby="sessionHeading">
     <div class="panel-head">
       <h2 id="sessionHeading">Save or restore a session</h2>
-      <p>Download the tempo, MIDI settings, title, and voices as JSON. Paste a saved session to restore it. Imports are validated before application.</p>
+      <p>Download the tempo, MIDI settings, title, and voices as JSON. Paste a saved session or pattern file to restore it. Imports are validated before application.</p>
     </div>
-    <label class="field" for="sessionJson">Session JSON</label>
-    <textarea id="sessionJson" class="session-json" rows="5" spellcheck="false" placeholder="Paste a beatgrid/session JSON file"></textarea>
+    <label class="field" for="sessionJson">Session or pattern JSON</label>
+    <textarea id="sessionJson" class="session-json" rows="5" spellcheck="false" placeholder="Paste a beatgrid/session or beatgrid/pattern-set JSON file"></textarea>
     <div class="button-cluster">
-      <button id="importSessionBtn" type="button" class="btn btn-ghost">Import session</button>
+      <button id="importSessionBtn" type="button" class="btn btn-ghost">Import</button>
+      <button id="downloadPatternsBtn" type="button" class="btn btn-ghost">Download patterns .json</button>
       <button id="exportSessionBtn" type="button" class="btn btn-primary">Download session .json</button>
     </div>
   </section>

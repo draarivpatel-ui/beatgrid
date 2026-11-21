@@ -5,12 +5,13 @@ An offline, silent studio for Euclidean rhythms, cycle analysis, and MIDI and Li
 ## What you can do
 
 - Add up to eight voices from presets or editable pulse, length, rotation, and MIDI note settings.
-- Toggle individual pads into a manual pattern and restore a voice to its Euclidean form.
-- Inspect cyclic onset gaps, onset density, and the shortest repeating vector.
+- Toggle individual pads into a manual pattern and restore a voice to its Euclidean form. Arrow keys move between pads, Space or Enter toggles, and every edit is announced in a live region.
+- Inspect cyclic onset gaps, onset density, step evenness, and the shortest repeating vector.
 - Compare full-cycle coincidence counts, Hamming distances, and an illustrative syncopation score.
 - Download a validated session JSON file that preserves manual and Euclidean voices, tempo, title, gate, notes, channels, and velocities. Paste the JSON to restore it.
+- Download a canonical pattern JSON set recording each voice's vector, least-rotation canonical form, gap layout, evenness, and syncopation. Paste it back to restore the voices as manual tracks.
 - Export MIDI Format 0, inspect its chunk lengths and bytes, or download LilyPond percussion source.
-- Switch themes, show a step ledger, enable hatch fills, and print the workspace.
+- Switch themes, show a step ledger, enable hatch fills, print the workspace, and drive the whole studio from the keyboard (shortcut list in the editor panel).
 
 ## Presets
 
@@ -35,6 +36,12 @@ The shared analysis horizon is the LCM of the declared voice lengths. A pattern 
 One step lasts `60 / (BPM * stepsPerBeat)` seconds. The UI uses four steps per beat. Coincidence and Hamming matrices use every step in the shared horizon. The ledger shows the first 96 steps. Long wheel diagrams sample markers at a disclosed stride, with at most about 128 markers per ring.
 
 Syncopation uses weights 4, 3, 2, and 1 for progressively weaker positions in 4/4. A hit contributes a weight difference if its nearest stronger following position is empty. Each voice is evaluated over the joint cycle of its length and the 16-step meter. This is an illustrative metric, not a claimed implementation of a published index. Compare per-onset values when voice meter cycles differ. Small adjacent gap spread is a useful diagnostic and alone does not prove maximal evenness.
+
+Step evenness is a normalized score in [0, 1]: the summed absolute deviation of cyclic onset gaps from the ideal gap n/k, divided by the worst packing of the same density. A score of 1 requires k to divide n. Euclidean vectors always attain the maximum for their density, verified exhaustively up to length 12 in the test suite.
+
+### Pattern descriptors
+
+`describePattern` and `exportPattern` record one voice as a `beatgrid/pattern` JSON object: its vector as entered, the canonical least rotation from Booth's algorithm (shared by every rotation of the pattern), onset gaps, evenness, and the syncopation score. `canonicalJson` sorts object keys at every depth, so equal descriptors serialize to identical bytes. `importPattern` reads a single descriptor or a `beatgrid/pattern-set` back into manual voices, with the vector string as the authoritative content. The workspace export button writes the whole voice list as one canonical set.
 
 ### Export correctness
 
@@ -61,7 +68,7 @@ LilyPond source targets version 2.24, emits an independent n/16 DrumStaff for ea
 }
 ```
 
-Channel and velocity default to 9 and 96. Imports validate schema, version, numeric bounds, binary cells, MIDI ranges, voice count, and shared horizon before changing the workspace. Unknown fields are dropped. Session text is limited to 128 KiB. Invalid controls clear previews and disable exports until corrected.
+Channel and velocity default to 9 and 96. Imports validate schema, version, numeric bounds, binary cells, MIDI ranges, voice count, and shared horizon before changing the workspace. Unknown fields are dropped. Session text is limited to 128 KiB, pattern text to 64 KiB. Invalid controls clear previews and disable exports until corrected. A rejected import leaves the workspace, previews, and downloads untouched; after a successful import the textarea is rewritten to the canonical session file that was applied.
 
 ## Node usage
 
@@ -75,8 +82,11 @@ const tracks = [
 const analysis = R.analyzePolyrhythm(tracks, 120);
 console.log(analysis.cycleSteps, analysis.cycleSeconds); // 72, 9
 console.log(R.inspectPattern(R.euclideanRhythm(3, 8)).gaps); // [3, 3, 2]
+console.log(R.evennessIndex(R.euclideanRhythm(3, 8))); // 0.8
 const midi = R.encodeMidiFile(tracks, 120, 480, { gate: 0.5 });
 const lily = R.exportLilyPond(tracks, 120, 'Study');
+const patternJson = R.exportPattern(tracks[0]); // canonical beatgrid/pattern JSON
+const restored = R.importPattern(patternJson); // { name, pattern }
 ```
 
 ## Verification
@@ -87,16 +97,18 @@ Run from this repository:
 node --test
 ```
 
-**125 tests pass, with zero failures or skipped tests.** The suite covers canonical patterns, rotations, arithmetic limits, meter phases, MIDI event timing and duplicate handling, chunk validation, LilyPond source, session round-trips, and browser controller regressions including the silent cycle playhead.
+**205 tests pass, with zero failures or skipped tests.** The suite covers canonical patterns, rotations, arithmetic limits, meter phases, MIDI event timing and duplicate handling, chunk validation, LilyPond source, session round-trips, and browser controller regressions including the silent cycle playhead.
 
 [ui.test.js](ui.test.js) executes the actual HTML and scripts with a deterministic DOM harness. It checks IDs and accessibility references, startup in both readiness states, pad editing, import rejection, invalid-input recovery, voice limits, themes, and real Blob downloads. The harness does not perform browser layout or visual rendering.
 
+[wave3.test.js](wave3.test.js) adds property-style checks for Bjorklund invariants (including an independent slope reference compared as a canonical necklace), step evenness bounds and rotation invariance, Booth least-rotation correctness against a brute-force scan, canonical JSON determinism, SMF byte structure parsed with an independent decoder, roving-tabindex keyboard navigation, aria-live announcements, and atomic import recovery.
+
 | File | Purpose |
 | --- | --- |
-| [rhythm.js](rhythm.js) | Pure UMD engine and export/session APIs |
+| [rhythm.js](rhythm.js) | Pure UMD engine and export/session/pattern APIs |
 | [app.js](app.js) | Browser controller |
 | [index.html](index.html), [style.css](style.css) | Workspace and responsive/print styles |
-| [test.js](test.js), [regression.test.js](regression.test.js), [ui.test.js](ui.test.js) | Automated verification |
+| [test.js](test.js), [regression.test.js](regression.test.js), [ui.test.js](ui.test.js), [wave3.test.js](wave3.test.js) | Automated verification |
 | [dom-harness.cjs](dom-harness.cjs) | Local DOM, event, clock, and download fixtures |
 
 ## License

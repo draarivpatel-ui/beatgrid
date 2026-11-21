@@ -537,6 +537,24 @@ code, pre { font-family: var(--mono); }
   outline-offset: -2px;
 }
 .remove-btn { align-self: center; }
+.shortcuts {
+  margin-top: 10px;
+  font-size: 0.76rem;
+  font-family: var(--mono);
+  color: var(--text-muted);
+}
+.shortcuts summary { cursor: pointer; color: var(--text-secondary); }
+.shortcuts ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 4px; }
+.shortcuts kbd {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  padding: 1px 5px;
+  border: 1px solid var(--border-strong);
+  border-bottom-width: 2px;
+  border-radius: 3px;
+  background: var(--surface-2);
+  color: var(--text-primary);
+}
 .hint {
   margin-top: 10px;
   font-size: 0.76rem;
