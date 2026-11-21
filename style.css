@@ -555,6 +555,8 @@ code, pre { font-family: var(--mono); }
   background: var(--surface-2);
   color: var(--text-primary);
 }
+.shortcut-state { margin: 8px 0 0; font-size: 0.73rem; }
+.shortcuts.is-off .single-key { opacity: 0.45; }
 .hint {
   margin-top: 10px;
   font-size: 0.76rem;

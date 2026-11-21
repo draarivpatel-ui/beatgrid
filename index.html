@@ -77,6 +77,10 @@
         <span class="check-label"><input type="checkbox" id="textureToggle"> Engraved hatch fills</span>
         <small>Cross-hatch pattern for print and color-vision clarity</small>
       </label>
+      <label class="field field-check">
+        <span class="check-label"><input type="checkbox" id="keysToggle" checked> Single-key shortcuts</span>
+        <small>Global P, A, E, M, L keys trigger the named buttons; turn off to prevent surprise edits</small>
+      </label>
     </div>
     <div class="preset-row" id="presetRow" aria-label="Euclidean rhythm presets">
       <span class="preset-label">Add a preset</span>
@@ -130,10 +134,11 @@
         <li><kbd>Home</kbd> and <kbd>End</kbd> jump to the first and last pad in a row</li>
         <li><kbd>Page Up</kbd> and <kbd>Page Down</kbd> jump between the first and last voice</li>
         <li><kbd>Space</kbd> or <kbd>Enter</kbd> toggles the focused pad into a manual edit</li>
-        <li><kbd>P</kbd> runs or stops the silent cycle playhead</li>
-        <li><kbd>A</kbd> adds a voice, <kbd>E</kbd> downloads the session JSON</li>
-        <li><kbd>M</kbd> downloads the MIDI file, <kbd>L</kbd> downloads the LilyPond source</li>
+        <li class="single-key"><kbd>P</kbd> runs or stops the silent cycle playhead</li>
+        <li class="single-key"><kbd>A</kbd> adds a voice, <kbd>E</kbd> downloads the session JSON</li>
+        <li class="single-key"><kbd>M</kbd> downloads the MIDI file, <kbd>L</kbd> downloads the LilyPond source</li>
       </ul>
+      <p id="shortcutState" class="shortcut-state">Single-key shortcuts are on.</p>
     </details>
   </section>
 

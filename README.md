@@ -9,9 +9,9 @@ An offline, silent studio for Euclidean rhythms, cycle analysis, and MIDI and Li
 - Inspect cyclic onset gaps, onset density, step evenness, and the shortest repeating vector.
 - Compare full-cycle coincidence counts, Hamming distances, and an illustrative syncopation score.
 - Download a validated session JSON file that preserves manual and Euclidean voices, tempo, title, gate, notes, channels, and velocities. Paste the JSON to restore it.
-- Download a canonical pattern JSON set recording each voice's vector, least-rotation canonical form, gap layout, evenness, and syncopation. Paste it back to restore the voices as manual tracks.
+- Download a canonical pattern JSON set recording each voice's vector, least-rotation canonical form, gap layout, evenness, syncopation, and MIDI voice settings. Paste it back to restore the voices as manual tracks.
 - Export MIDI Format 0, inspect its chunk lengths and bytes, or download LilyPond percussion source.
-- Switch themes, show a step ledger, enable hatch fills, print the workspace, and drive the whole studio from the keyboard (shortcut list in the editor panel).
+- Switch themes, show a step ledger, enable hatch fills, print the workspace, and drive the whole studio from the keyboard (shortcut list in the editor panel). Single-key shortcuts can be switched off; the choice persists.
 
 ## Presets
 
@@ -41,7 +41,7 @@ Step evenness is a normalized score in [0, 1]: the summed absolute deviation of 
 
 ### Pattern descriptors
 
-`describePattern` and `exportPattern` record one voice as a `beatgrid/pattern` JSON object: its vector as entered, the canonical least rotation from Booth's algorithm (shared by every rotation of the pattern), onset gaps, evenness, and the syncopation score. `canonicalJson` sorts object keys at every depth, so equal descriptors serialize to identical bytes. `importPattern` reads a single descriptor or a `beatgrid/pattern-set` back into manual voices, with the vector string as the authoritative content. The workspace export button writes the whole voice list as one canonical set.
+`describePattern` and `exportPattern` record one voice as a `beatgrid/pattern` JSON object: its vector as entered, the canonical least rotation from Booth's algorithm (shared by every rotation of the pattern), onset gaps, evenness, the syncopation score, and its MIDI note, channel, and velocity. `canonicalJson` sorts object keys at every depth, so equal descriptors serialize to identical bytes. `importPattern` reads a single descriptor or a `beatgrid/pattern-set` back into manual voices, with the vector string as the authoritative content; voice fields are validated and carried through, and older timing-only records import with default voice settings. The workspace export button writes the whole voice list as one canonical set.
 
 ### Export correctness
 
@@ -86,7 +86,7 @@ console.log(R.evennessIndex(R.euclideanRhythm(3, 8))); // 0.8
 const midi = R.encodeMidiFile(tracks, 120, 480, { gate: 0.5 });
 const lily = R.exportLilyPond(tracks, 120, 'Study');
 const patternJson = R.exportPattern(tracks[0]); // canonical beatgrid/pattern JSON
-const restored = R.importPattern(patternJson); // { name, pattern }
+const restored = R.importPattern(patternJson); // { name, pattern, note, channel, velocity }
 ```
 
 ## Verification
@@ -97,18 +97,20 @@ Run from this repository:
 node --test
 ```
 
-**205 tests pass, with zero failures or skipped tests.** The suite covers canonical patterns, rotations, arithmetic limits, meter phases, MIDI event timing and duplicate handling, chunk validation, LilyPond source, session round-trips, and browser controller regressions including the silent cycle playhead.
+**221 tests pass, with zero failures or skipped tests.** The suite covers canonical patterns, rotations, arithmetic limits, meter phases, MIDI event timing and duplicate handling, chunk validation, LilyPond source, session round-trips, and browser controller regressions including the silent cycle playhead.
 
 [ui.test.js](ui.test.js) executes the actual HTML and scripts with a deterministic DOM harness. It checks IDs and accessibility references, startup in both readiness states, pad editing, import rejection, invalid-input recovery, voice limits, themes, and real Blob downloads. The harness does not perform browser layout or visual rendering.
 
 [wave3.test.js](wave3.test.js) adds property-style checks for Bjorklund invariants (including an independent slope reference compared as a canonical necklace), step evenness bounds and rotation invariance, Booth least-rotation correctness against a brute-force scan, canonical JSON determinism, SMF byte structure parsed with an independent decoder, roving-tabindex keyboard navigation, aria-live announcements, and atomic import recovery.
+
+[wave4.test.js](wave4.test.js) covers the strict-review fixes: pattern imports validate the prospective session before mutating the workspace, pattern records round-trip MIDI voice fields and expose them on manual rows, the single-key shortcut toggle disables the global letter bindings and persists, and `canonicalJson` preserves own `__proto__` keys with exact lexicographical key order.
 
 | File | Purpose |
 | --- | --- |
 | [rhythm.js](rhythm.js) | Pure UMD engine and export/session/pattern APIs |
 | [app.js](app.js) | Browser controller |
 | [index.html](index.html), [style.css](style.css) | Workspace and responsive/print styles |
-| [test.js](test.js), [regression.test.js](regression.test.js), [ui.test.js](ui.test.js), [wave3.test.js](wave3.test.js) | Automated verification |
+| [test.js](test.js), [regression.test.js](regression.test.js), [ui.test.js](ui.test.js), [wave3.test.js](wave3.test.js), [wave4.test.js](wave4.test.js) | Automated verification |
 | [dom-harness.cjs](dom-harness.cjs) | Local DOM, event, clock, and download fixtures |
 
 ## License

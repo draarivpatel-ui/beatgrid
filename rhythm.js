@@ -376,28 +376,38 @@
   /*
    * Deterministic JSON: object keys serialize in sorted order at every
    * depth, array order is preserved, and insignificant whitespace is
-   * removed. Equal inputs always produce identical bytes.
+   * removed. Equal inputs always produce identical bytes. Pairs are
+   * emitted directly, never through an intermediate plain object, so
+   * every own enumerable key survives (including "__proto__") and keys
+   * sort in exact lexicographical UTF-16 order: "10" precedes "2".
    */
-  function sortForJson(value) {
-    if (Array.isArray(value)) {
-      var out = new Array(value.length);
-      for (var i = 0; i < value.length; i++) out[i] = sortForJson(value[i]);
-      return out;
-    }
-    if (value && typeof value === 'object') {
-      var keys = Object.keys(value).sort();
-      var out = {};
-      for (var j = 0; j < keys.length; j++) out[keys[j]] = sortForJson(value[keys[j]]);
-      return out;
-    }
-    return value;
-  }
-
   function canonicalJson(value) {
     if (value === undefined || typeof value === 'function' || typeof value === 'symbol') {
       throw new TypeError('canonical JSON needs a JSON value');
     }
-    return JSON.stringify(sortForJson(value));
+    return writeCanonical(value);
+  }
+
+  function writeCanonical(value) {
+    if (value === null || typeof value !== 'object') return JSON.stringify(value);
+    if (typeof value.toJSON === 'function') return writeCanonical(value.toJSON());
+    if (Array.isArray(value)) {
+      var cells = new Array(value.length);
+      for (var i = 0; i < value.length; i++) {
+        var cell = value[i];
+        cells[i] = (cell === undefined || typeof cell === 'function' || typeof cell === 'symbol') ? 'null' : writeCanonical(cell);
+      }
+      return '[' + cells.join(',') + ']';
+    }
+    var keys = Object.keys(value).sort(function (a, b) { return a < b ? -1 : a > b ? 1 : 0; });
+    var pairs = [];
+    for (var j = 0; j < keys.length; j++) {
+      var key = keys[j];
+      var member = value[key];
+      if (member === undefined || typeof member === 'function' || typeof member === 'symbol') continue;
+      pairs.push(JSON.stringify(key) + ':' + writeCanonical(member));
+    }
+    return '{' + pairs.join(',') + '}';
   }
 
   /*
@@ -437,6 +447,9 @@
       gapSpread: info.gapSpread,
       evenness: info.evenness,
       fundamentalPeriod: info.fundamentalPeriod,
+      note: track.note,
+      channel: track.channel,
+      velocity: track.velocity,
       syncopation: {
         score: score,
         normalized: evaluatedOnsets === 0 ? 0 : score / evaluatedOnsets,
@@ -459,9 +472,12 @@
   /*
    * Reads a beatgrid/pattern or beatgrid/pattern-set export back into
    * normalized manual voices. The embedded vector strings are
-   * authoritative; everything else is recomputed on use so a stale or
-   * edited descriptor still restores the same onset cells it declares.
-   * A single pattern returns one voice object, a set returns an array.
+   * authoritative for timing; optional note, channel, and velocity
+   * fields are validated against their MIDI ranges and carried through,
+   * so a stale or edited descriptor still restores the same onset cells
+   * and voice settings it declares. Older timing-only records import
+   * with default voice settings. A single pattern returns one voice
+   * object, a set returns an array.
    */
   function importPattern(text) {
     if (typeof text !== 'string') throw new TypeError('pattern import needs JSON text');
@@ -488,7 +504,18 @@
     } else {
       throw new TypeError('pattern needs a vector string or a pattern array');
     }
-    return { name: safeText(entry.name, 'Pattern', 40), pattern: pattern };
+    var voice = { name: safeText(entry.name, 'Pattern', 40), pattern: pattern };
+    var ranges = { note: [0, 127], channel: [0, 15], velocity: [1, 127] };
+    ['note', 'channel', 'velocity'].forEach(function (field) {
+      var value = entry[field];
+      if (value === undefined || value === null) return;
+      assertInteger(value, 'pattern ' + field);
+      if (value < ranges[field][0] || value > ranges[field][1]) {
+        throw new RangeError('pattern ' + field + ' must be between ' + ranges[field][0] + ' and ' + ranges[field][1]);
+      }
+      voice[field] = value;
+    });
+    return voice;
   }
 
   /* ---------- metrical weight and syncopation ---------- */

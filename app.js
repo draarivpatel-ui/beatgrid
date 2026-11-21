@@ -23,6 +23,7 @@
 
   var play = { on: false, step: 0, carry: 0, last: 0, raf: 0 };
   var gridFocus = { track: 0, step: 0 };
+  var shortcutsEnabled = true;
 
   /* ---------- small DOM helpers ---------- */
 
@@ -336,9 +337,31 @@
           t.note = v;
           recompute();
         }));
+        nums.appendChild(numberField('ch', t.channel, 0, 15, function (v) {
+          t.channel = v;
+          recompute();
+        }));
+        nums.appendChild(numberField('vel', t.velocity, 1, 127, function (v) {
+          t.velocity = v;
+          recompute();
+        }));
         ident.appendChild(nums);
       } else {
         ident.appendChild(el('span', { className: 'track-formula' }, 'Manual vector, click cells to edit'));
+        var voiceNums = el('div', { className: 'track-num-row' });
+        voiceNums.appendChild(numberField('note', t.note, 0, 127, function (v) {
+          t.note = v;
+          recompute();
+        }));
+        voiceNums.appendChild(numberField('ch', t.channel, 0, 15, function (v) {
+          t.channel = v;
+          recompute();
+        }));
+        voiceNums.appendChild(numberField('vel', t.velocity, 1, 127, function (v) {
+          t.velocity = v;
+          recompute();
+        }));
+        ident.appendChild(voiceNums);
         var reset = el('button', { type: 'button', className: 'btn btn-ghost' }, 'Reset to Euclidean');
         reset.addEventListener('click', function () {
           t.manual = null;
@@ -961,9 +984,15 @@
         var voices = Array.isArray(imported) ? imported : [imported];
         if (state.tracks.length + voices.length > MAX_TRACKS) {
           flashNote('Import rejected: ' + voices.length + ' patterns would exceed the ' + MAX_TRACKS + ' voice limit');
+          announce('Import rejected');
           return;
         }
-        voices.forEach(addTrack);
+        readControls();
+        var prospective = currentSession();
+        voices.forEach(function (v) {
+          prospective.tracks.push({ name: v.name, pattern: v.pattern.slice(), note: v.note, channel: v.channel, velocity: v.velocity });
+        });
+        R.validateSession(prospective).tracks.slice(state.tracks.length).forEach(addTrack);
         recompute();
         $('sessionJson').value = R.exportSession(currentSession());
         flashNote('Imported ' + voices.length + ' pattern voice' + (voices.length === 1 ? '' : 's') + ' as manual tracks.');
@@ -1004,6 +1033,25 @@
     var stamp = document.documentElement.getAttribute('data-theme');
     if (stamp) return stamp === 'dark';
     return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  }
+
+  /*
+   * WCAG 2.1.4: the global single-letter bindings (P, A, E, M, L) can be
+   * switched off. The choice persists in local storage and the shortcuts
+   * disclosure dims the affected bindings so the list stays accurate.
+   * Pad navigation keys live on the step cells and always work.
+   */
+  function setShortcutsEnabled(enabled) {
+    shortcutsEnabled = enabled;
+    $('keysToggle').checked = enabled;
+    var panel = document.querySelector('.shortcuts');
+    if (panel) panel.classList.toggle('is-off', !enabled);
+    var status = $('shortcutState');
+    if (status) {
+      status.textContent = enabled ?
+        'Single-key shortcuts are on.' :
+        'Single-key shortcuts are off; grid navigation still works and the buttons stay clickable.';
+    }
   }
 
   /* ---------- wiring ---------- */
@@ -1069,6 +1117,12 @@
       else document.documentElement.removeAttribute('data-texture');
     });
 
+    $('keysToggle').addEventListener('change', function () {
+      setShortcutsEnabled($('keysToggle').checked);
+      try { localStorage.setItem('beatgrid-keys', shortcutsEnabled ? 'on' : 'off'); } catch (e) { /* storage is optional */ }
+      announce('Single-key shortcuts ' + (shortcutsEnabled ? 'on' : 'off'));
+    });
+
     $('hexWidth').addEventListener('change', renderHex);
     $('hexRange').addEventListener('change', renderHex);
 
@@ -1117,6 +1171,7 @@
 
     window.addEventListener('keydown', function (event) {
       if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
+      if (!shortcutsEnabled) return;
       var target = event.target;
       if (target && target.tagName && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
       var shortcuts = {
@@ -1141,6 +1196,10 @@
     var saved = null;
     try { saved = localStorage.getItem('beatgrid-theme'); } catch (e) { /* storage is optional */ }
     if (saved === 'light' || saved === 'dark') applyTheme(saved);
+
+    var savedKeys = null;
+    try { savedKeys = localStorage.getItem('beatgrid-keys'); } catch (e) { /* storage is optional */ }
+    setShortcutsEnabled(savedKeys !== 'off');
 
     renderPresets();
     addTrack({ name: 'Tresillo', pulses: 3, steps: 8, note: 36 });
