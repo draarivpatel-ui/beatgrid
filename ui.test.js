@@ -124,5 +124,17 @@ test('silent cycle playhead sweeps the wheel at session tempo', () => {
   assert.equal(page.get('playStatus').textContent, '');
   page.flushFrame(500);
   assert.equal(page.get('playStatus').textContent, '');
+
+  // Restart must not stack RAF loops: one 125 ms frame advances exactly one step.
+  page.get('cyclePlayBtn').click();
+  page.flushFrame(125);
+  assert.match(page.get('playStatus').textContent, /Step 2 of 72/, 'restart advances one step per frame, not two');
+  page.flushFrame(125);
+  assert.match(page.get('playStatus').textContent, /Step 3 of 72/);
+  page.get('cyclePlayBtn').click();
+  page.get('cyclePlayBtn').click(); // immediate second start on top of a pending RAF
+  page.flushFrame(125);
+  assert.match(page.get('playStatus').textContent, /Step 2 of 72/, 'rapid stop+start still runs a single loop');
+  page.get('cyclePlayBtn').click();
   auditPage(page);
 });

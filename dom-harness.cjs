@@ -259,6 +259,7 @@ function createPage(directory, options = {}) {
     performance: { now: () => now }, Date: FixtureDate, URL: FakeURL, URLSearchParams, Blob, TextEncoder, TextDecoder,
     getComputedStyle: () => ({ getPropertyValue: () => '#333333' }),
     requestAnimationFrame: callback => { animationFrames.push(callback); return animationFrames.length; },
+    cancelAnimationFrame: id => { if (id >= 1 && id <= animationFrames.length) animationFrames[id - 1] = null; },
     setTimeout: callback => { timers.push(callback); return timers.length; }, clearTimeout() {},
     console: { log() {}, warn() {}, error(...args) { throw new Error(args.join(' ')); } }
   };
@@ -275,7 +276,7 @@ function createPage(directory, options = {}) {
     get(id) { const node = document.getElementById(id); assert.ok(node, 'missing element #' + id); return node; },
     fire(target, type, extra = {}) { target.dispatchEvent({ type, bubbles: true, ...extra }); },
     key(code, type = 'keydown', target = document.body, extra = {}) { window.dispatchEvent({ type, code, target, ...extra }); },
-    flushFrame(deltaMs = 1000 / 60) { now += deltaMs; const batch = animationFrames.splice(0); for (const callback of batch) callback(now); },
+    flushFrame(deltaMs = 1000 / 60) { now += deltaMs; const batch = animationFrames.splice(0); for (const callback of batch) if (callback) callback(now); },
     flushTimers() { const batch = timers.splice(0); for (const callback of batch) callback(); }
   };
 }

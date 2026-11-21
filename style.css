@@ -131,6 +131,8 @@
 
 .wheel-playhead line { stroke: var(--accent); stroke-width: 2; }
 .wheel-playhead circle { fill: var(--accent); stroke: var(--surface-1); stroke-width: 1.5; }
+.wheel-playhead .wheel-pulse { fill: none; stroke-width: 2.4; opacity: 0.95; }
+.wheel-playhead .wheel-coincidence { fill: none; stroke: var(--accent); stroke-dasharray: 3 3; stroke-width: 1.6; opacity: 0.9; }
 
 body {
   margin: 0;

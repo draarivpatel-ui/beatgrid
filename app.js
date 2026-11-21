@@ -21,7 +21,7 @@
     texture: false
   };
 
-  var play = { on: false, step: 0, carry: 0, last: 0 };
+  var play = { on: false, step: 0, carry: 0, last: 0, raf: 0 };
 
   /* ---------- small DOM helpers ---------- */
 
@@ -469,8 +469,9 @@
     var g = document.getElementById('playheadG');
     if (g) return g;
     g = svgEl('g', { id: 'playheadG', className: 'wheel-playhead' });
-    g.appendChild(svgEl('line', { id: 'playLine', x1: 210, y1: 210, x2: 210, y2: 20 }));
-    g.appendChild(svgEl('circle', { id: 'playDot', cx: 210, cy: 20, r: 5.5 }));
+    g.appendChild(svgEl('g', { id: 'playHits' }));
+    g.appendChild(svgEl('line', { id: 'playLine', x1: 210, y1: 210, x2: 210, y2: 28 }));
+    g.appendChild(svgEl('circle', { id: 'playDot', cx: 210, cy: 28, r: 5.5 }));
     svg.appendChild(g);
     return g;
   }
@@ -479,20 +480,34 @@
     ensurePlayheadGroup();
     play.step = play.step % a.cycleSteps;
     var theta = (play.step / a.cycleSteps) * Math.PI * 2 - Math.PI / 2;
-    var x2 = 210 + Math.cos(theta) * 190;
-    var y2 = 210 + Math.sin(theta) * 190;
+    var x2 = 210 + Math.cos(theta) * 182;
+    var y2 = 210 + Math.sin(theta) * 182;
     var line = document.getElementById('playLine');
     line.setAttribute('x2', x2.toFixed(2));
     line.setAttribute('y2', y2.toFixed(2));
     var dot = document.getElementById('playDot');
     dot.setAttribute('cx', x2.toFixed(2));
     dot.setAttribute('cy', y2.toFixed(2));
+    var ringCount = Math.min(a.tracks.length, MAX_HUE_SLOTS);
+    var ringStep = ringCount > 1 ? (182 - 46) / (ringCount - 1) : 0;
+    var hits = document.getElementById('playHits');
+    clear(hits);
     var voices = 0;
     var names = [];
-    a.tracks.forEach(function (t) {
-      if (t.expanded[play.step] === 1) { voices++; names.push(t.name); }
+    a.tracks.forEach(function (t, i) {
+      if (t.expanded[play.step] !== 1 || i >= MAX_HUE_SLOTS) return;
+      voices++; names.push(t.name);
+      var radius = ringCount > 1 ? 46 + i * ringStep : 114;
+      hits.appendChild(svgEl('circle', {
+        cx: (210 + Math.cos(theta) * radius).toFixed(2),
+        cy: (210 + Math.sin(theta) * radius).toFixed(2),
+        r: 7.5, className: 'wheel-pulse', stroke: seriesColor(i)
+      }));
     });
     var coincident = a.coincidenceSteps && a.coincidenceSteps.indexOf(play.step) !== -1;
+    if (coincident) {
+      hits.appendChild(svgEl('circle', { cx: x2.toFixed(2), cy: y2.toFixed(2), r: 10, className: 'wheel-coincidence' }));
+    }
     $('playStatus').textContent = 'Step ' + (play.step + 1) + ' of ' + a.cycleSteps + ' - ' +
       voices + ' voice' + (voices === 1 ? '' : 's') + ' sounding' +
       (names.length ? ' (' + names.join(', ') + ')' : '') +
@@ -512,11 +527,12 @@
       play.step = (play.step + adv) % a.cycleSteps;
       updatePlayheadDom(a);
     }
-    requestAnimationFrame(playTick);
+    play.raf = requestAnimationFrame(playTick);
   }
 
   function startPlay() {
     if (!state.analysis) return;
+    if (play.raf) cancelAnimationFrame(play.raf);
     play.on = true;
     play.step = 0;
     play.carry = 0;
@@ -524,11 +540,12 @@
     $('cyclePlayBtn').textContent = 'Stop cycle';
     $('cyclePlayBtn').setAttribute('aria-pressed', 'true');
     updatePlayheadDom(state.analysis);
-    requestAnimationFrame(playTick);
+    play.raf = requestAnimationFrame(playTick);
   }
 
   function stopPlay() {
     play.on = false;
+    if (play.raf) { cancelAnimationFrame(play.raf); play.raf = 0; }
     var g = document.getElementById('playheadG');
     if (g) g.parentNode.removeChild(g);
     $('playStatus').textContent = '';
