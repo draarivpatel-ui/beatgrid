@@ -547,3 +547,54 @@ test('canonicalJson serializes nesting far deeper than the call stack', () => {
   assert.equal(text[0], '[');
   assert.equal(text[text.length - 1], ']');
 });
+
+test('canonicalJson treats Symbol wrapper objects as plain objects like JSON.stringify', () => {
+  const wrapped = Object.assign(Object(Symbol('x')), { keep: 7 });
+  assert.equal(R.canonicalJson({ w: wrapped }), '{"w":{"keep":7}}');
+  assert.equal(R.canonicalJson({ w: wrapped }), JSON.stringify({ w: wrapped }));
+  assert.equal(R.canonicalJson(Object(Symbol('x'))), '{}');
+  assert.equal(R.canonicalJson(Object(Symbol('x'))), JSON.stringify(Object(Symbol('x'))));
+  assert.equal(R.canonicalJson([Object(Symbol('x'))]), '[{}]');
+  assert.equal(R.canonicalJson([Object(Symbol('x'))]), JSON.stringify([Object(Symbol('x'))]));
+});
+
+test('canonicalJson array length uses ToNumber so BigInt lengths throw like native', () => {
+  const bigWrapper = new Proxy([1, 2, 3], { get: (t, k) => (k === 'length' ? Object(3n) : t[k]) });
+  assert.throws(() => R.canonicalJson(bigWrapper), TypeError);
+  assert.throws(() => JSON.stringify(bigWrapper), TypeError);
+  const bigPrimitive = new Proxy([1, 2, 3], { get: (t, k) => (k === 'length' ? 3n : t[k]) });
+  assert.throws(() => R.canonicalJson(bigPrimitive), TypeError);
+  assert.throws(() => JSON.stringify(bigPrimitive), TypeError);
+  const numberWrapper = new Proxy([1, 2, 3], { get: (t, k) => (k === 'length' ? Object(3) : t[k]) });
+  assert.equal(R.canonicalJson(numberWrapper), '[1,2,3]');
+  assert.equal(R.canonicalJson(numberWrapper), JSON.stringify(numberWrapper));
+  const symbolLength = new Proxy([1, 2, 3], { get: (t, k) => (k === 'length' ? Symbol('n') : t[k]) });
+  assert.throws(() => R.canonicalJson(symbolLength), TypeError);
+  assert.throws(() => JSON.stringify(symbolLength), TypeError);
+});
+
+test('canonicalJson internals survive Array.prototype numeric accessor pollution', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const vm = require('vm');
+  const ctx = vm.createContext({});
+  vm.runInContext(fs.readFileSync(path.join(__dirname, 'rhythm.js'), 'utf8'), ctx);
+  // The poisoned prototype lives only inside this realm, so the
+  // node --test runner's own Array.prototype is never touched.
+  const api = vm.runInContext(`
+    Object.defineProperty(Array.prototype, '0', {
+      get() { return 'inherited'; },
+      set() {},
+      configurable: true
+    });
+    BeatGrid
+  `, ctx);
+  // Sanity check: the poison is live, a plain push at index 0 is swallowed.
+  assert.equal(vm.runInContext('(() => { const a = []; a.push(1); return a[0]; })()', ctx), 'inherited');
+  assert.equal(api.canonicalJson({ a: 1 }), '{"a":1}');
+  assert.equal(api.canonicalJson([1, 2, 3]), '[1,2,3]');
+  const nested = vm.runInContext('({ a: [1, { b: [2, 3], c: "x" }], d: { e: {} } })', ctx);
+  const expected = R.canonicalJson({ a: [1, { b: [2, 3], c: 'x' }], d: { e: {} } });
+  assert.equal(api.canonicalJson(nested), expected);
+  assert.deepEqual(JSON.parse(api.canonicalJson(nested)), { a: [1, { b: [2, 3], c: 'x' }], d: { e: {} } });
+});

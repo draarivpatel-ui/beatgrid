@@ -406,22 +406,22 @@
   }
 
   /*
-   * Number, String, Boolean, BigInt and Symbol wrapper objects serialize as
-   * their wrapped primitive. The internal slot is probed by the built-in
-   * valueOf methods captured at load: they read the slot itself and throw
-   * on receivers that lack it, so fake wrappers, proxies, forged
+   * Number, String, Boolean and BigInt wrapper objects serialize as their
+   * wrapped primitive; SerializeJSONProperty has no SymbolData unbox step,
+   * so a Symbol wrapper serializes as an ordinary object of its own
+   * enumerable keys. The internal slot is probed by the built-in valueOf
+   * methods captured at load: they read the slot itself and throw on
+   * receivers that lack it, so fake wrappers, proxies, forged
    * @@toStringTag values, replaced prototype methods and cross-realm
    * objects all resolve exactly as the spec's slot check does. Number and
    * String then convert through the ordinary primitive protocol,
    * honouring overridden valueOf and toString like ToNumber and ToString
-   * do; Boolean, BigInt and Symbol read the slot straight from the probe
-   * result.
+   * do; Boolean and BigInt read the slot straight from the probe result.
    */
   var jsonNumberValueOf = Number.prototype.valueOf;
   var jsonStringValueOf = String.prototype.valueOf;
   var jsonBooleanValueOf = Boolean.prototype.valueOf;
   var jsonBigIntValueOf = typeof BigInt === 'function' ? BigInt.prototype.valueOf : null;
-  var jsonSymbolValueOf = typeof Symbol === 'function' ? Symbol.prototype.valueOf : null;
   var jsonToPrimitive = typeof Symbol === 'function' ? Symbol.toPrimitive : undefined;
   /*
    * Invocation and platform helpers are captured too: "fn.call(...)"
@@ -443,7 +443,7 @@
   var jsonArraySort = Array.prototype.sort;
   var jsonArrayJoin = Array.prototype.join;
   var jsonArrayPush = Array.prototype.push;
-  var jsonArrayPop = Array.prototype.pop;
+  var jsonSetPrototypeOf = typeof Object.setPrototypeOf === 'function' ? Object.setPrototypeOf : null;
   var JsonString = String;
   var JsonNumber = Number;
   var jsonIsNaN = Number.isNaN;
@@ -467,10 +467,6 @@
     if (probe.found) return probe.primitive;
     if (jsonBigIntValueOf !== null) {
       probe = trySlot(value, jsonBigIntValueOf);
-      if (probe.found) return probe.primitive;
-    }
-    if (jsonSymbolValueOf !== null) {
-      probe = trySlot(value, jsonSymbolValueOf);
       if (probe.found) return probe.primitive;
     }
     return value;
@@ -514,10 +510,14 @@
     throw new JsonTypeError('canonical JSON cannot convert an object to a primitive value');
   }
 
-  /* ToLength from ECMA-262: integer truncation clamped to [0, 2^53 - 1]. */
+  /*
+   * ToLength from ECMA-262: ToNumber truncation clamped to
+   * [0, 2^53 - 1]. ToNumber (unlike Number()) throws a TypeError on BigInt
+   * and Symbol values, matching SerializeJSONArray's LengthOfArrayLike.
+   */
   function toJsonArrayLength(len) {
     if (typeof len === 'bigint') throw new JsonTypeError('canonical JSON cannot serialize a BigInt');
-    var n = jsonTrunc(JsonNumber(len));
+    var n = jsonTrunc(+len);
     if (jsonIsNaN(n) || n < 0) return 0;
     return jsonMin(n, 9007199254740991);
   }
@@ -528,10 +528,20 @@
    * circular values are rejected through the ancestor set. Array frames
    * capture length once through ToLength like SerializeJSONArray, so a
    * toJSON or getter that mutates it mid-write can never leave holes or
-   * trailing commas; object keys are snapshotted once up front.
+   * trailing commas; object keys are snapshotted once up front. The frame
+   * stack is a linked list and each frame's parts are a prototype-less
+   * array, so a numeric accessor poisoned onto Array.prototype can never
+   * swallow the serializer's own index writes the way a shared-prototype
+   * array would.
    */
+  function jsonNewParts() {
+    var parts = [];
+    if (jsonSetPrototypeOf !== null) jsonSetPrototypeOf(parts, null);
+    return parts;
+  }
+
   function writeResolved(value, ancestors) {
-    var frames = [];
+    var top = null;
     for (;;) {
       var text;
       var opened = false;
@@ -555,30 +565,29 @@
           jsonApply(jsonSetAdd, ancestors, [value]);
           var frame;
           if (jsonIsArray(value)) {
-            frame = { obj: value, keys: null, len: toJsonArrayLength(value.length), index: 0, parts: [] };
+            frame = { obj: value, keys: null, len: toJsonArrayLength(value.length), index: 0, parts: jsonNewParts(), prev: top };
           } else {
             var keys = jsonObjectKeys(value);
             jsonApply(jsonArraySort, keys, [function (a, b) { return a < b ? -1 : a > b ? 1 : 0; }]);
-            frame = { obj: value, keys: keys, len: keys.length, index: 0, parts: [] };
+            frame = { obj: value, keys: keys, len: keys.length, index: 0, parts: jsonNewParts(), prev: top };
           }
-          jsonApply(jsonArrayPush, frames, [frame]);
+          top = frame;
           opened = true;
         }
       }
       if (opened) {
-        var current = frames[frames.length - 1];
-        var hasFirst = current.index < current.len;
+        var hasFirst = top.index < top.len;
         if (hasFirst) {
-          value = resolveMember(current.obj, current.keys ? current.keys[current.index] : JsonString(current.index));
+          value = resolveMember(top.obj, top.keys ? top.keys[top.index] : JsonString(top.index));
           continue;
         }
-        text = current.keys ? '{}' : '[]';
-        jsonApply(jsonArrayPop, frames, []);
-        jsonApply(jsonSetDelete, ancestors, [current.obj]);
+        text = top.keys ? '{}' : '[]';
+        var finished = top;
+        top = top.prev;
+        jsonApply(jsonSetDelete, ancestors, [finished.obj]);
       }
       for (;;) {
-        if (frames.length === 0) return text;
-        var top = frames[frames.length - 1];
+        if (top === null) return text;
         if (top.keys) {
           if (text !== undefined) jsonApply(jsonArrayPush, top.parts, [jsonStringify(top.keys[top.index]) + ':' + text]);
         } else {
@@ -591,8 +600,9 @@
           break;
         }
         text = (top.keys ? '{' : '[') + jsonApply(jsonArrayJoin, top.parts, [',']) + (top.keys ? '}' : ']');
-        jsonApply(jsonArrayPop, frames, []);
-        jsonApply(jsonSetDelete, ancestors, [top.obj]);
+        var done = top;
+        top = top.prev;
+        jsonApply(jsonSetDelete, ancestors, [done.obj]);
       }
     }
   }
