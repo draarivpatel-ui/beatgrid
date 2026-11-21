@@ -477,6 +477,7 @@
 
   function updatePlayheadDom(a) {
     ensurePlayheadGroup();
+    play.step = play.step % a.cycleSteps;
     var theta = (play.step / a.cycleSteps) * Math.PI * 2 - Math.PI / 2;
     var x2 = 210 + Math.cos(theta) * 190;
     var y2 = 210 + Math.sin(theta) * 190;
