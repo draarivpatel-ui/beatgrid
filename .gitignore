@@ -1,0 +1,4 @@
+.DS_Store
+node_modules/
+video/*.wav
+video/*.mp4

@@ -2,6 +2,8 @@
 
 An offline, silent studio for Euclidean rhythms, cycle analysis, and MIDI and LilyPond file export. Open [index.html](index.html) directly in a browser. There is no build step, dependency install, audio playback, or network request from the application.
 
+**Live demo:** [https://aariv.me/beatgrid/](https://aariv.me/beatgrid/)
+
 ## What you can do
 
 - Add up to eight voices from presets or editable pulse, length, rotation, and MIDI note settings.
