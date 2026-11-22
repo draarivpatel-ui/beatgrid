@@ -1,0 +1,367 @@
+[
+ {
+  "do": "eval",
+  "js": "(() => { const p = document.createElement('div'); p.id='__raf_pump'; p.style.cssText='position:fixed;left:0;top:0;width:2px;height:2px;z-index:2147483647;pointer-events:none;background:rgba(255,255,255,0.02)'; document.documentElement.appendChild(p); p.animate([{opacity:0.02},{opacity:0.06}],{duration:120,iterations:Infinity,direction:'alternate'}); })()"
+ },
+ {
+  "do": "at",
+  "s": 0.35
+ },
+ {
+  "do": "move",
+  "selector": "header .brand",
+  "ms": 1200
+ },
+ {
+  "do": "at",
+  "s": 7.47
+ },
+ {
+  "do": "move",
+  "selector": ".silence-note",
+  "ms": 900
+ },
+ {
+  "do": "move",
+  "selector": "#statCycle",
+  "ms": 900
+ },
+ {
+  "do": "at",
+  "s": 15.99
+ },
+ {
+  "do": "scrollTo",
+  "selector": ".stat-row",
+  "ms": 1200,
+  "offset": 130
+ },
+ {
+  "do": "move",
+  "selector": "#statCoincidence",
+  "ms": 800
+ },
+ {
+  "do": "at",
+  "s": 21.5
+ },
+ {
+  "do": "move",
+  "selector": "#statSeconds",
+  "ms": 800
+ },
+ {
+  "do": "at",
+  "s": 29.89
+ },
+ {
+  "do": "scrollTo",
+  "selector": "#trackEditor",
+  "ms": 1400,
+  "offset": 120
+ },
+ {
+  "do": "move",
+  "selector": "#trackEditor .track-row:nth-child(1) .track-cells",
+  "ms": 900
+ },
+ {
+  "do": "at",
+  "s": 34.45
+ },
+ {
+  "do": "move",
+  "selector": "#trackEditor .track-row:nth-child(2) .track-cells",
+  "ms": 800
+ },
+ {
+  "do": "at",
+  "s": 36.8
+ },
+ {
+  "do": "click",
+  "selector": ".step-cell[data-track='1'][data-step='1']",
+  "ms": 800
+ },
+ {
+  "do": "move",
+  "selector": "#trackEditor .track-row:nth-child(2) .track-formula",
+  "ms": 800
+ },
+ {
+  "do": "click",
+  "selector": "#trackEditor .track-row:nth-child(2) .track-ident .btn-ghost",
+  "ms": 800
+ },
+ {
+  "do": "at",
+  "s": 43.99
+ },
+ {
+  "do": "scrollTo",
+  "selector": "#presetRow",
+  "ms": 1200,
+  "offset": 240
+ },
+ {
+  "do": "click",
+  "selector": "#presetRow .preset-chip:nth-child(3)",
+  "ms": 900
+ },
+ {
+  "do": "scrollTo",
+  "selector": "#trackEditor",
+  "ms": 1100,
+  "offset": 100
+ },
+ {
+  "do": "move",
+  "selector": "#trackEditor .track-row:nth-child(4) .track-name-line",
+  "ms": 900
+ },
+ {
+  "do": "at",
+  "s": 50.43
+ },
+ {
+  "do": "scrollTo",
+  "selector": "#diagnosticsTable",
+  "ms": 1300,
+  "offset": 150
+ },
+ {
+  "do": "move",
+  "selector": "#diagnosticsTable",
+  "ms": 900
+ },
+ {
+  "do": "at",
+  "s": 58.82
+ },
+ {
+  "do": "scrollTo",
+  "selector": "#wheelFigure",
+  "ms": 1400,
+  "offset": 120
+ },
+ {
+  "do": "move",
+  "selector": "#wheelSvg",
+  "ms": 900
+ },
+ {
+  "do": "click",
+  "selector": "#wheelTableBtn",
+  "ms": 700
+ },
+ {
+  "do": "wait",
+  "ms": 1600
+ },
+ {
+  "do": "click",
+  "selector": "#wheelChartBtn",
+  "ms": 700
+ },
+ {
+  "do": "at",
+  "s": 67.9
+ },
+ {
+  "do": "move",
+  "selector": "#coincidenceTable",
+  "ms": 900
+ },
+ {
+  "do": "wait",
+  "ms": 900
+ },
+ {
+  "do": "move",
+  "selector": "#hammingTable",
+  "ms": 900
+ },
+ {
+  "do": "at",
+  "s": 77.85
+ },
+ {
+  "do": "scrollTo",
+  "selector": "#syncFigure",
+  "ms": 1300,
+  "offset": 160
+ },
+ {
+  "do": "move",
+  "selector": "#syncSvg",
+  "ms": 900
+ },
+ {
+  "do": "at",
+  "s": 83.69
+ },
+ {
+  "do": "scrollTo",
+  "selector": "#sessionJson",
+  "ms": 1400,
+  "offset": 220
+ },
+ {
+  "do": "move",
+  "selector": "#exportSessionBtn",
+  "ms": 800
+ },
+ {
+  "do": "move",
+  "selector": "#downloadPatternsBtn",
+  "ms": 800
+ },
+ {
+  "do": "at",
+  "s": 95.52
+ },
+ {
+  "do": "eval",
+  "js": "(() => { const t = document.getElementById('sessionJson'); t.value = JSON.stringify({schema:'beatgrid/session',version:1,title:'Imported study',bpm:120,ppq:480,gate:0.5,tracks:[{name:'Cinquillo',pulses:5,steps:8,rotation:0,note:38},{name:'Manual',pattern:[1,0,1,1,0,1,0,1,0],note:42}]}, null, 2); t.dispatchEvent(new Event('input', {bubbles: true})); })()"
+ },
+ {
+  "do": "wait",
+  "ms": 700
+ },
+ {
+  "do": "click",
+  "selector": "#importSessionBtn",
+  "ms": 900
+ },
+ {
+  "do": "scrollTo",
+  "selector": "#sessionStatus",
+  "ms": 1000,
+  "offset": 330
+ },
+ {
+  "do": "move",
+  "selector": "#sessionStatus",
+  "ms": 700
+ },
+ {
+  "do": "scrollTo",
+  "selector": "#trackEditor",
+  "ms": 1200,
+  "offset": 140
+ },
+ {
+  "do": "move",
+  "selector": "#trackEditor .track-row:nth-child(2) .track-formula",
+  "ms": 900
+ },
+ {
+  "do": "at",
+  "s": 102.23
+ },
+ {
+  "do": "scrollTo",
+  "selector": "#lilyPreview",
+  "ms": 1400,
+  "offset": 160
+ },
+ {
+  "do": "move",
+  "selector": "#lilyPreview",
+  "ms": 900
+ },
+ {
+  "do": "at",
+  "s": 106.55
+ },
+ {
+  "do": "scrollTo",
+  "selector": "#hexDump",
+  "ms": 1300,
+  "offset": 200
+ },
+ {
+  "do": "move",
+  "selector": "#hexDump",
+  "ms": 900
+ },
+ {
+  "do": "move",
+  "selector": "#chunkTable",
+  "ms": 800
+ },
+ {
+  "do": "select",
+  "selector": "#hexRange",
+  "value": "track"
+ },
+ {
+  "do": "move",
+  "selector": "#hexDump",
+  "ms": 800
+ },
+ {
+  "do": "at",
+  "s": 113.46
+ },
+ {
+  "do": "scrollTo",
+  "selector": "#wheelFigure",
+  "ms": 1400,
+  "offset": 120
+ },
+ {
+  "do": "click",
+  "selector": "#cyclePlayBtn",
+  "ms": 800
+ },
+ {
+  "do": "wait",
+  "ms": 7500
+ },
+ {
+  "do": "at",
+  "s": 116.34
+ },
+ {
+  "do": "at",
+  "s": 117.41
+ },
+ {
+  "do": "eval",
+  "js": "document.getElementById('cyclePlayBtn').click()"
+ },
+ {
+  "do": "scrollTo",
+  "selector": "header .brand",
+  "ms": 1800,
+  "offset": 0
+ },
+ {
+  "do": "click",
+  "selector": "#themeBtn",
+  "ms": 700
+ },
+ {
+  "do": "wait",
+  "ms": 900
+ },
+ {
+  "do": "click",
+  "selector": "#themeBtn",
+  "ms": 700
+ },
+ {
+  "do": "wait",
+  "ms": 600
+ },
+ {
+  "do": "move",
+  "selector": "header .brand",
+  "ms": 1000
+ },
+ {
+  "do": "at",
+  "s": 125.91
+ }
+]

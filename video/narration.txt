@@ -1,0 +1,13 @@
+BeatGrid is a silent studio for Euclidean rhythms that runs entirely offline in the browser. It makes no network requests and plays no audio; the work happens as analysis on screen and as files you export.
+
+Three voices open the session: Tresillo, Seven in twelve, and Four in nine. Their cycle lengths realign every seventy-two steps, exactly nine seconds at one hundred twenty beats per minute. Each step is one sixteenth note at four steps per beat.
+
+Every pad is editable. Toggling a cell turns the voice into a manual pattern, and one button restores the Euclidean form. Arrow keys move across the grid, and a preset chip adds another voice, up to eight.
+
+The pattern inspector reports cyclic onset gaps, onset density, step evenness, and the shortest repeating vector. The phase wheel plots every voice on a single angular axis, and a step ledger lists the first ninety-six steps in order.
+
+Coincidence and Hamming matrices compare every pair of voices across the whole cycle, here thirty-two shared hits in seventy-two steps. The syncopation panel scores each onset against a four-four meter grid.
+
+Exports cover four formats: a validated session file, a canonical pattern set, a MIDI format-zero file with a byte-level inspector, and LilyPond percussion source. Pasting a session back restores the workspace exactly; a rejected import changes nothing. Every download is generated locally, byte by byte.
+
+Voice lengths run to sixty-four steps, with shared cycles capped at four thousand ninety-six. Two hundred thirty-nine tests keep the math honest. BeatGrid turns a rhythm idea into notation, numbers, and files, with nothing leaving the machine.
