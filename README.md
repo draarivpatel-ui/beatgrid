@@ -14,6 +14,10 @@ An offline, silent studio for Euclidean rhythms, cycle analysis, and MIDI and Li
 - Download a canonical pattern JSON set recording each voice's vector, least-rotation canonical form, gap layout, evenness, syncopation, and MIDI voice settings. Paste it back to restore the voices as manual tracks.
 - Export MIDI Format 0, inspect its chunk lengths and bytes, or download LilyPond percussion source.
 - Switch themes, show a step ledger, enable hatch fills, print the workspace, and drive the whole studio from the keyboard (shortcut list in the editor panel). Single-key shortcuts can be switched off; the choice persists.
+- Compare five curated polyrhythm ensembles plus the live workspace in the Polyrhythm and Phase Lab: shared LCM horizons, Booth canonical necklaces, evenness, coincidence, Hamming distance, per-onset syncopation, and exact Format-0 MIDI byte lengths.
+- Sweep every integer rotation of a voice against the rest of an ensemble, see the full coincidence and syncopation curve, flag in-phase maxima and hocket minima, and apply a rotation back to the lab or into the studio.
+- Export a digest-stamped polyrhythm brief as JSON, formula-safe CSV, or Markdown. One canonical payload is cached per state so the on-page SHA-256 fingerprint, JSON export, CSV provenance header, and Markdown footer always carry the same digest, with a tamper check to prove it.
+- Share or bookmark lab state through a strict `#bg=` URL hash (ensemble, tempo, voice, rotation) that fails closed on malformed input, and run the built-in self-test panel for SHA-256 vectors, Bjorklund invariants, Booth rotation invariance, and codec round-trips.
 
 ## Presets
 
@@ -99,7 +103,7 @@ Run from this repository:
 node --test
 ```
 
-**221 tests pass, with zero failures or skipped tests.** The suite covers canonical patterns, rotations, arithmetic limits, meter phases, MIDI event timing and duplicate handling, chunk validation, LilyPond source, session round-trips, and browser controller regressions including the silent cycle playhead.
+**530 tests pass, with zero failures or skipped tests.** The suite covers canonical patterns, rotations, arithmetic limits, meter phases, MIDI event timing and duplicate handling, chunk validation, LilyPond source, session round-trips, and browser controller regressions including the silent cycle playhead.
 
 [ui.test.js](ui.test.js) executes the actual HTML and scripts with a deterministic DOM harness. It checks IDs and accessibility references, startup in both readiness states, pad editing, import rejection, invalid-input recovery, voice limits, themes, and real Blob downloads. The harness does not perform browser layout or visual rendering.
 
@@ -107,12 +111,17 @@ node --test
 
 [wave4.test.js](wave4.test.js) covers the strict-review fixes: pattern imports validate the prospective session before mutating the workspace, pattern records round-trip MIDI voice fields and expose them on manual rows, the single-key shortcut toggle disables the global letter bindings and persists, and `canonicalJson` preserves own `__proto__` keys with exact lexicographical key order.
 
+[polyrhythm-lab.test.js](polyrhythm-lab.test.js) exercises the lab module directly: ensemble definitions and horizon bounds, comparator metric parity with the engine, rotation sweeps and classifications, digest parity across the JSON, CSV, and Markdown exports, formula-injection escaping, hostile normalization inputs (`NaN`, `Infinity`, `-0`, `__proto__`, oversized horizons), hash codec round-trips and malformed-hash rejection, and every registered in-page self-test.
+
+[lab-ui.test.js](lab-ui.test.js) drives the lab inside the real page through the DOM harness: comparator row and keyboard selection, necklace and sweep SVG structure, real sweep-bar interaction, applied rotations, tempo validation, loading ensembles into the studio, digest parity between the page and downloads, the tamper check, the self-test runner, `#bg=` bookmark restore (including `hashchange`), live-workspace tracking, and graceful hiding when the lab script is absent.
+
 | File | Purpose |
 | --- | --- |
 | [rhythm.js](rhythm.js) | Pure UMD engine and export/session/pattern APIs |
+| [polyrhythm-lab.js](polyrhythm-lab.js) | Pure UMD lab module: ensembles, sweeps, SHA-256, brief exports, hash codec, self-tests |
 | [app.js](app.js) | Browser controller |
 | [index.html](index.html), [style.css](style.css) | Workspace and responsive/print styles |
-| [test.js](test.js), [regression.test.js](regression.test.js), [ui.test.js](ui.test.js), [wave3.test.js](wave3.test.js), [wave4.test.js](wave4.test.js) | Automated verification |
+| [test.js](test.js), [regression.test.js](regression.test.js), [ui.test.js](ui.test.js), [wave3.test.js](wave3.test.js), [wave4.test.js](wave4.test.js), [polyrhythm-lab.test.js](polyrhythm-lab.test.js), [lab-ui.test.js](lab-ui.test.js) | Automated verification |
 | [dom-harness.cjs](dom-harness.cjs) | Local DOM, event, clock, and download fixtures |
 
 ## License

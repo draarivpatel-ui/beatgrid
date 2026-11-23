@@ -935,6 +935,7 @@
     renderLily();
     renderHex();
     renderDiagnostics(state.analysis);
+    renderLab();
     return true;
   }
 
@@ -956,6 +957,507 @@
 
   function currentSession() {
     return { schema: 'beatgrid/session', version: 1, title: state.title, bpm: state.bpm, ppq: state.ppq, gate: state.gate, tracks: toEngineTracks() };
+  }
+
+  /* ---------- polyrhythm necklace and phase-rotation lab ---------- */
+
+  var LAB = window.BeatGridLab || null;
+  var lab = {
+    ready: false,
+    ensembleId: 'default-study',
+    bpm: 120,
+    voiceIndex: 0,
+    selectedRotation: 0,
+    rotationMap: {},
+    analysisKey: '',
+    analysis: null,
+    sweepKey: '',
+    sweep: null,
+    brief: null
+  };
+
+  function labEnsembles() {
+    var list = LAB.ENSEMBLES.slice();
+    list.push({ id: LAB.LIVE_ID, name: 'Live workspace', summary: 'Tracks currently loaded in the studio editor.', tracks: null });
+    return list;
+  }
+
+  function labLiveTracks() {
+    return lab.ensembleId === LAB.LIVE_ID ? toEngineTracks() : null;
+  }
+
+  /*
+   * Rotation offsets are applied per voice on top of the ensemble or the
+   * live workspace. Euclidean voices advance their rotation field; manual
+   * vectors rotate in place.
+   */
+  function labActiveTracks() {
+    return LAB.tracksForState({ e: lab.ensembleId, rotations: lab.rotationMap }, labLiveTracks());
+  }
+
+  function labRotationOf(index) {
+    var r = lab.rotationMap[index];
+    return r === undefined ? 0 : r;
+  }
+
+  function setLabStatus(message) {
+    var node = $('labAuditStatus');
+    if (node) node.textContent = message;
+  }
+
+  function labCompute() {
+    var tracks = labActiveTracks();
+    var akey = R.canonicalJson({ tracks: tracks, bpm: lab.bpm });
+    if (akey !== lab.analysisKey) {
+      lab.analysis = LAB.analyzeEnsemble(tracks, lab.bpm);
+      lab.analysisKey = akey;
+      lab.sweepKey = '';
+    }
+    var skey = akey + '|voice' + lab.voiceIndex;
+    if (skey !== lab.sweepKey) {
+      lab.sweep = LAB.rotationSweep(tracks, lab.voiceIndex, lab.bpm);
+      lab.sweepKey = skey;
+    }
+    lab.brief = LAB.briefFor({
+      e: lab.ensembleId,
+      bpm: lab.bpm,
+      voice: lab.voiceIndex,
+      rot: labRotationOf(lab.voiceIndex),
+      rotations: lab.rotationMap
+    }, labLiveTracks());
+  }
+
+  function renderLabCompare() {
+    var table = $('labCompareTable');
+    clear(table);
+    table.appendChild(el('caption', { className: 'sr-only' }, 'Ensemble comparison across presets and the live workspace'));
+    var head = el('thead');
+    var hr = el('tr');
+    ['Ensemble', 'Voices', 'Horizon', 'Coincidences', 'Evenness', 'Mean Hamming', 'Sync per onset', 'MIDI bytes'].forEach(function (label, i) {
+      hr.appendChild(el('th', { scope: 'col', className: i > 1 ? 'num' : '' }, label));
+    });
+    head.appendChild(hr);
+    table.appendChild(head);
+    var body = el('tbody');
+    labEnsembles().forEach(function (ens) {
+      var tracks = ens.id === LAB.LIVE_ID ? toEngineTracks() : ens.tracks;
+      var a;
+      try {
+        a = LAB.analyzeEnsemble(tracks, lab.bpm);
+      } catch (error) {
+        a = null;
+      }
+      var tr = el('tr', { className: 'lab-compare-row' + (ens.id === lab.ensembleId ? ' is-active' : ''), tabindex: '0', 'data-ensemble': ens.id });
+      tr.appendChild(el('th', { scope: 'row' }, ens.name));
+      if (a) {
+        tr.appendChild(el('td', { className: 'num' }, String(a.voices.length)));
+        tr.appendChild(el('td', { className: 'num' }, String(a.horizon)));
+        tr.appendChild(el('td', { className: 'num' }, a.coincidenceCount + ' (' + fmt(a.coincidenceDensity * 100, 1) + '%)'));
+        tr.appendChild(el('td', { className: 'num' }, fmt(a.meanEvenness, 3)));
+        tr.appendChild(el('td', { className: 'num' }, fmt(a.meanHamming, 1)));
+        tr.appendChild(el('td', { className: 'num' }, fmt(a.meanSyncPerOnset, 3)));
+        tr.appendChild(el('td', { className: 'num' }, String(a.midiBytes)));
+      } else {
+        tr.appendChild(el('td', { colspan: '7' }, 'Unavailable for the current workspace'));
+      }
+      function choose() {
+        if (lab.ensembleId === ens.id) return;
+        lab.ensembleId = ens.id;
+        lab.voiceIndex = 0;
+        lab.selectedRotation = 0;
+        lab.rotationMap = {};
+        $('labEnsembleSel').value = ens.id;
+        renderLab();
+        announce('Lab ensemble ' + ens.name + ' active');
+      }
+      tr.addEventListener('click', choose);
+      tr.addEventListener('keydown', function (event) {
+        if (event.code === 'Enter' || event.code === 'Space') {
+          event.preventDefault();
+          choose();
+        }
+      });
+      body.appendChild(tr);
+    });
+    table.appendChild(body);
+  }
+
+  function renderLabVoices() {
+    var table = $('labVoiceTable');
+    clear(table);
+    table.appendChild(el('caption', { className: 'sr-only' }, 'Canonical necklaces, evenness, and per onset syncopation for the active ensemble'));
+    var head = el('thead');
+    var hr = el('tr');
+    ['Voice', 'Formula', 'Vector', 'Canonical', 'Gaps', 'Evenness', 'Sync onset', 'Applied rot'].forEach(function (label, i) {
+      hr.appendChild(el('th', { scope: 'col', className: i === 5 || i === 6 ? 'num' : '' }, label));
+    });
+    head.appendChild(hr);
+    table.appendChild(head);
+    var body = el('tbody');
+    lab.analysis.voices.forEach(function (v, i) {
+      var tr = el('tr');
+      tr.appendChild(el('th', { scope: 'row' }, 'T' + (i + 1) + ' ' + v.name));
+      tr.appendChild(el('td', {}, v.formula));
+      tr.appendChild(el('td', { className: 'num' }, v.vector));
+      tr.appendChild(el('td', { className: 'num' }, v.canonicalVector));
+      tr.appendChild(el('td', {}, v.gaps.length ? v.gaps.join('+') : 'none'));
+      tr.appendChild(el('td', { className: 'num' }, fmt(v.evenness, 3)));
+      tr.appendChild(el('td', { className: 'num' }, fmt(v.syncPerOnset, 3)));
+      tr.appendChild(el('td', { className: 'num' }, String(labRotationOf(i))));
+      body.appendChild(tr);
+    });
+    table.appendChild(body);
+  }
+
+  function renderLabVoiceSelect() {
+    var sel = $('labVoiceSel');
+    clear(sel);
+    lab.analysis.voices.forEach(function (v, i) {
+      sel.appendChild(el('option', { value: String(i), selected: i === lab.voiceIndex ? '' : null }, 'T' + (i + 1) + ' ' + v.name));
+    });
+    sel.value = String(lab.voiceIndex);
+  }
+
+  /* Up to four concentric necklaces, one per voice in its own period. */
+  function renderNecklace() {
+    var svg = $('labNecklaceSvg');
+    clear(svg);
+    svg.appendChild(svgEl('title', { id: 'labNecklaceTitle' }, 'Concentric Euclidean polygon necklace'));
+    svg.appendChild(svgEl('desc', { id: 'labNecklaceDesc' }, 'Rings hold each voice period as a polygon of onsets; accent rays mark shared onsets across voices.'));
+    var a = lab.analysis;
+    var size = 420;
+    var cx = size / 2;
+    var cy = size / 2;
+    var voices = a.voices.slice(0, 4);
+    var ringCount = voices.length;
+    var maxRadius = 182;
+    var minRadius = 52;
+    var ringStep = ringCount > 1 ? (maxRadius - minRadius) / (ringCount - 1) : 0;
+
+    for (var r = 0; r < ringCount; r++) {
+      var radius = ringCount > 1 ? minRadius + r * ringStep : (minRadius + maxRadius) / 2;
+      svg.appendChild(svgEl('circle', { cx: cx, cy: cy, r: radius, className: 'neck-guide' + (r === ringCount - 1 ? ' is-baseline' : '') }));
+    }
+
+    // Coincident onset rays across the LCM horizon, stride sampled past 160.
+    var rayStride = Math.max(1, Math.ceil(a.coincidenceSteps.length / 160));
+    var inner = ringCount > 1 ? minRadius - 18 : (minRadius + maxRadius) / 2 - 40;
+    var outer = ringCount > 1 ? maxRadius + 14 : (minRadius + maxRadius) / 2 + 40;
+    for (var ci = 0; ci < a.coincidenceSteps.length; ci++) {
+      if (ci % rayStride !== 0) continue;
+      var s = a.coincidenceSteps[ci];
+      var ang = (s / a.horizon) * Math.PI * 2 - Math.PI / 2;
+      svg.appendChild(svgEl('line', {
+        x1: cx + Math.cos(ang) * inner, y1: cy + Math.sin(ang) * inner,
+        x2: cx + Math.cos(ang) * outer, y2: cy + Math.sin(ang) * outer,
+        className: 'neck-ray'
+      }));
+    }
+
+    voices.forEach(function (v, i) {
+      var radius = ringCount > 1 ? minRadius + i * ringStep : (minRadius + maxRadius) / 2;
+      var color = seriesColor(i);
+      var n = v.steps;
+      var onsetPoints = [];
+      for (var step = 0; step < n; step++) {
+        var theta = (step / n) * Math.PI * 2 - Math.PI / 2;
+        var px = cx + Math.cos(theta) * radius;
+        var py = cy + Math.sin(theta) * radius;
+        var isOn = v.vector.charAt(step) === '1';
+        if (isOn) onsetPoints.push([px, py]);
+        svg.appendChild(svgEl('circle', {
+          cx: px.toFixed(2), cy: py.toFixed(2), r: isOn ? 4 : 1.8,
+          fill: isOn ? color : 'var(--surface-1)',
+          className: 'neck-dot' + (isOn ? '' : ' is-rest')
+        }));
+      }
+      if (onsetPoints.length >= 2) {
+        var d = onsetPoints.map(function (p, k) {
+          return (k ? 'L' : 'M') + p[0].toFixed(2) + ' ' + p[1].toFixed(2);
+        }).join(' ') + (onsetPoints.length > 2 ? ' Z' : '');
+        svg.appendChild(svgEl('path', { d: d, className: 'neck-poly', stroke: color }));
+      }
+      svg.appendChild(svgEl('text', {
+        x: cx, y: cy - radius - 4, className: 'neck-label', 'text-anchor': 'middle'
+      }, 'T' + (i + 1)));
+    });
+
+    svg.appendChild(svgEl('text', { x: cx, y: cy - 4, className: 'neck-center', 'text-anchor': 'middle' }, 'LCM ' + a.horizon));
+    svg.appendChild(svgEl('text', { x: cx, y: cy + 10, className: 'neck-center', 'text-anchor': 'middle' }, 'steps'));
+
+    $('labNecklaceCaption').textContent = voices.length + ' of ' + a.voices.length + ' voices as necklaces over their own periods. ' +
+      a.coincidenceSteps.length + ' coincident onset steps' + (rayStride > 1 ? ', rays sample every ' + rayStride : '') +
+      '. Booth canonical forms listed in the table.';
+  }
+
+  /* Rotation sweep: one focusable bar per integer rotation. */
+  function renderSweep() {
+    var svg = $('labSweepSvg');
+    clear(svg);
+    var sweep = lab.sweep;
+    svg.appendChild(svgEl('title', { id: 'labSweepTitle' }, 'Rotation versus coincidence sweep for ' + sweep.voiceName));
+    svg.appendChild(svgEl('desc', { id: 'labSweepDesc' }, sweep.steps + ' rotations, ' + sweep.horizon + ' step horizon. In-phase and hocket rotations are marked.'));
+    var width = 560;
+    var height = 250;
+    var left = 40;
+    var right = width - 14;
+    var top = 16;
+    var bottom = height - 30;
+    var n = sweep.points.length;
+    var maxCount = Math.max(1, sweep.maxCoincidences);
+    var barGap = 2;
+    var barWidth = Math.max(2, (right - left) / n - barGap);
+    var applied = labRotationOf(lab.voiceIndex);
+
+    for (var tick = 0; tick <= 4; tick++) {
+      var y = bottom - (bottom - top) * tick / 4;
+      svg.appendChild(svgEl('line', { x1: left, y1: y, x2: right, y2: y, className: 'sweep-axis' }));
+      svg.appendChild(svgEl('text', { x: left - 6, y: y + 3, className: 'sweep-tick', 'text-anchor': 'end' }, String(Math.round(maxCount * tick / 4))));
+    }
+
+    sweep.points.forEach(function (p, i) {
+      var barH = (bottom - top) * p.coincidences / maxCount;
+      var x = left + i * (barWidth + barGap);
+      var y = bottom - barH;
+      var cls = 'sweep-bar';
+      if (p.coincidences === sweep.maxCoincidences) cls += ' is-inphase';
+      else if (p.coincidences === sweep.minCoincidences) cls += ' is-hocket';
+      else cls += ' is-mid';
+      if (i === applied) cls += ' is-applied';
+      if (i === lab.selectedRotation) cls += ' is-selected';
+      var bar = svgEl('rect', {
+        x: x.toFixed(2), y: y.toFixed(2), width: barWidth.toFixed(2), height: Math.max(1, barH).toFixed(2),
+        className: cls, tabindex: '0', role: 'button'
+      });
+      bar.setAttribute('aria-label', 'Rotation ' + i + ' of ' + n + ': ' + p.coincidences + ' coincidences, syncopation ' + p.syncopation +
+        (i === applied ? ', currently applied' : ''));
+      var detail = {
+        title: 'Rotation ' + i,
+        rows: [
+          { text: p.coincidences + ' coincidences (' + fmt(p.density * 100, 1) + '% of horizon)' },
+          { text: 'Syncopation ' + p.syncopation + ', ' + fmt(p.syncPerOnset, 2) + ' per onset' },
+          { text: 'Mean Hamming ' + fmt(p.meanHamming, 1) + ' vs other voices' }
+        ]
+      };
+      bar.addEventListener('pointermove', function () { showTooltip(bar, detail); });
+      bar.addEventListener('pointerleave', hideTooltip);
+      bar.addEventListener('focus', function () { showTooltip(bar, detail); });
+      bar.addEventListener('blur', hideTooltip);
+      function pick() {
+        lab.selectedRotation = i;
+        renderSweep();
+        $('labRotReadout').textContent = 'Rotation ' + i + ' selected: ' + p.coincidences + ' coincidences, syncopation ' + p.syncopation + '.';
+      }
+      bar.addEventListener('click', pick);
+      bar.addEventListener('keydown', function (event) {
+        if (event.code === 'Enter' || event.code === 'Space') {
+          event.preventDefault();
+          pick();
+        }
+      });
+      svg.appendChild(bar);
+      if (n <= 16 || i % Math.ceil(n / 16) === 0) {
+        svg.appendChild(svgEl('text', { x: x + barWidth / 2, y: bottom + 12, className: 'sweep-rot-label', 'text-anchor': 'middle' }, String(i)));
+      }
+    });
+
+    svg.appendChild(svgEl('text', { x: left, y: height - 2, className: 'sweep-tick' }, 'rotation r of ' + sweep.voiceName));
+    svg.appendChild(svgEl('text', { x: right, y: height - 2, className: 'sweep-tick', 'text-anchor': 'end' }, 'coincidences on ' + sweep.horizon + ' step horizon'));
+
+    $('labSweepCaption').textContent = 'In-phase rotations r = ' + sweep.inPhase.join(', ') + ' reach ' + sweep.maxCoincidences +
+      ' coincidences; hocket rotations r = ' + sweep.hocket.join(', ') + ' drop to ' + sweep.minCoincidences +
+      '. Applied rotation: ' + applied + '.';
+  }
+
+  function renderDigest() {
+    $('labDigest').textContent = 'SHA-256 brief fingerprint ' + lab.brief.digest.slice(0, 16) + '...' + lab.brief.digest.slice(-8) +
+      ' over ' + lab.brief.json.length + ' canonical bytes';
+    $('labDigest').setAttribute('data-digest', lab.brief.digest);
+    $('labDigest').setAttribute('title', lab.brief.digest);
+  }
+
+  function renderLab() {
+    if (!lab.ready) return;
+    try {
+      labCompute();
+      renderLabCompare();
+      renderLabVoices();
+      renderLabVoiceSelect();
+      renderNecklace();
+      renderSweep();
+      renderDigest();
+      $('labLoadBtn').disabled = lab.ensembleId === LAB.LIVE_ID;
+    } catch (error) {
+      setLabStatus('Lab paused: ' + error.message);
+    }
+  }
+
+  /* Restores a #bg= bookmark into the lab. Fail closed: returns false. */
+  function applyLabHash(hash) {
+    var decoded = LAB.decodeShareHash(hash);
+    if (!decoded) return false;
+    lab.ensembleId = decoded.e;
+    lab.bpm = decoded.bpm;
+    lab.rotationMap = {};
+    var count = decoded.e === LAB.LIVE_ID ? state.tracks.length : LAB.ensembleById(decoded.e).tracks.length;
+    lab.voiceIndex = Math.min(decoded.voice, count - 1);
+    var steps;
+    if (decoded.e === LAB.LIVE_ID) {
+      var t = state.tracks[lab.voiceIndex];
+      steps = t ? patternFor(t).length : 1;
+    } else {
+      steps = LAB.ensembleById(decoded.e).tracks[lab.voiceIndex].steps;
+    }
+    lab.rotationMap[lab.voiceIndex] = ((decoded.rot % steps) + steps) % steps;
+    lab.selectedRotation = lab.rotationMap[lab.voiceIndex];
+    $('labEnsembleSel').value = decoded.e;
+    $('labBpm').value = String(lab.bpm);
+    renderLab();
+    return true;
+  }
+
+  function initLab() {
+    var panel = $('labPanel');
+    if (!panel) return;
+    if (!LAB || !R) {
+      panel.hidden = true;
+      return;
+    }
+    lab.ready = true;
+    lab.bpm = state.bpm;
+    $('labBpm').value = String(lab.bpm);
+
+    var sel = $('labEnsembleSel');
+    labEnsembles().forEach(function (ens) {
+      sel.appendChild(el('option', { value: ens.id, title: ens.summary, selected: ens.id === lab.ensembleId ? '' : null }, ens.name));
+    });
+    sel.addEventListener('change', function () {
+      lab.ensembleId = sel.value;
+      lab.voiceIndex = 0;
+      lab.selectedRotation = 0;
+      lab.rotationMap = {};
+      renderLab();
+      announce('Lab ensemble switched');
+    });
+
+    $('labBpm').addEventListener('input', function () {
+      var v = Number($('labBpm').value);
+      if (Number.isSafeInteger(v) && v >= 20 && v <= 300) {
+        lab.bpm = v;
+        renderLab();
+      }
+    });
+    $('labBpm').addEventListener('change', function () {
+      var v = Number($('labBpm').value);
+      if (!Number.isSafeInteger(v) || v < 20 || v > 300) {
+        $('labBpm').value = String(lab.bpm);
+        setLabStatus('Lab tempo must be an integer from 20 to 300 BPM');
+        return;
+      }
+      lab.bpm = v;
+      renderLab();
+    });
+
+    $('labVoiceSel').addEventListener('change', function () {
+      lab.voiceIndex = Number($('labVoiceSel').value);
+      lab.selectedRotation = labRotationOf(lab.voiceIndex);
+      renderLab();
+      announce('Sweep voice changed');
+    });
+
+    $('labApplyRotBtn').addEventListener('click', function () {
+      lab.rotationMap[lab.voiceIndex] = lab.selectedRotation;
+      renderLab();
+      $('labRotReadout').textContent = 'Rotation ' + lab.selectedRotation + ' applied to ' + lab.sweep.voiceName + '.';
+      announce('Applied rotation ' + lab.selectedRotation + ' to ' + lab.sweep.voiceName);
+    });
+
+    $('labLoadBtn').addEventListener('click', function () {
+      if (lab.ensembleId === LAB.LIVE_ID) return;
+      try {
+        var tracks = labActiveTracks();
+        var prospective = { schema: 'beatgrid/session', version: 1, title: state.title, bpm: state.bpm, ppq: state.ppq, gate: state.gate, tracks: tracks };
+        var validated = R.validateSession(prospective);
+        state.tracks = [];
+        gridFocus = { track: 0, step: 0 };
+        validated.tracks.forEach(addTrack);
+        recompute();
+        var name = (LAB.ensembleById(lab.ensembleId) || { name: 'ensemble' }).name;
+        flashNote('Loaded ' + validated.tracks.length + ' voices from ' + name + '. Studio tempo kept at ' + state.bpm + ' BPM.');
+        announce('Ensemble ' + name + ' loaded into the studio');
+      } catch (error) {
+        setLabStatus('Load rejected: ' + error.message);
+      }
+    });
+
+    function labStateForShare() {
+      return { e: lab.ensembleId, bpm: lab.bpm, voice: lab.voiceIndex, rot: labRotationOf(lab.voiceIndex) };
+    }
+
+    $('labJsonBtn').addEventListener('click', function () {
+      if (!lab.brief) return;
+      downloadBlob(new Blob([lab.brief.json], { type: 'application/json' }), safeFilename(state.title + ' brief', 'json'));
+      setLabStatus('JSON brief exported with digest ' + lab.brief.digest.slice(0, 16) + '...');
+    });
+    $('labCsvBtn').addEventListener('click', function () {
+      if (!lab.brief) return;
+      downloadBlob(new Blob([lab.brief.csv], { type: 'text/csv;charset=utf-8' }), safeFilename(state.title + ' brief', 'csv'));
+      setLabStatus('CSV brief exported; provenance header carries the same digest.');
+    });
+    $('labMdBtn').addEventListener('click', function () {
+      if (!lab.brief) return;
+      downloadBlob(new Blob([lab.brief.markdown], { type: 'text/markdown;charset=utf-8' }), safeFilename(state.title + ' brief', 'md'));
+      setLabStatus('Markdown brief exported; footer carries the same digest.');
+    });
+    $('labLinkBtn').addEventListener('click', function () {
+      var base = 'index.html';
+      if (typeof location !== 'undefined' && location && location.href) base = String(location.href).split('#')[0];
+      var link = base + LAB.encodeShareState(labStateForShare());
+      $('labShareOut').value = link;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(link).then(function () {
+          setLabStatus('Share link copied to the clipboard.');
+        }, function () {
+          setLabStatus('Share link is in the field; copy it manually.');
+        });
+      } else {
+        setLabStatus('Share link is in the field; copy it manually.');
+      }
+    });
+    $('labVerifyBtn').addEventListener('click', function () {
+      if (!lab.brief) return;
+      var result = LAB.verifyBrief(lab.brief.json);
+      setLabStatus(result.ok ? 'Digest verified: payload matches ' + result.actual.slice(0, 24) + '...' : 'Digest mismatch: ' + result.reason);
+      announce(result.ok ? 'Lab brief digest verified' : 'Lab brief digest mismatch');
+    });
+    $('labTamperBtn').addEventListener('click', function () {
+      if (!lab.brief) return;
+      var result = LAB.tamperCheck(lab.brief);
+      setLabStatus(result.ok ? 'Tamper check failed: a perturbed payload verified true' : 'Tamper check flagged a mismatch as designed: ' + result.actual.slice(0, 16) + '... != ' + result.expected.slice(0, 16) + '...');
+    });
+    $('labSelfTestBtn').addEventListener('click', function () {
+      var report = LAB.runSelfTests();
+      var list = $('labTestList');
+      clear(list);
+      report.results.forEach(function (item) {
+        var li = el('li', { className: item.ok ? 'is-ok' : 'is-bad' }, item.name + (item.ok ? ' ok' : ' FAIL: ' + item.detail));
+        list.appendChild(li);
+      });
+      $('labTestSummary').textContent = report.passed + '/' + report.total + ' self-tests passing';
+      announce('Lab self-tests: ' + report.passed + ' of ' + report.total + ' passing');
+    });
+
+    window.addEventListener('hashchange', function () {
+      if (typeof location !== 'undefined' && location && applyLabHash(location.hash)) {
+        announce('Lab state restored from bookmark hash');
+      }
+    });
+
+    panel.hidden = false;
+    if (typeof location !== 'undefined' && location && location.hash && applyLabHash(location.hash)) {
+      flashNote('Lab state restored from the bookmark hash.');
+    }
+    renderLab();
   }
 
   /*
@@ -1207,6 +1709,7 @@
     addTrack({ name: 'Four in nine', pulses: 4, steps: 9, note: 45 });
     wire();
     recompute();
+    initLab();
     $('versionLabel').textContent = R.VERSION;
   }
 

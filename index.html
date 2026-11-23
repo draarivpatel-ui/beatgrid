@@ -217,6 +217,74 @@
     </section>
   </div>
 
+  <!-- Polyrhythm and phase lab: progressive enhancement, stays hidden when polyrhythm-lab.js is absent -->
+  <section class="panel" id="labPanel" aria-labelledby="labHeading" hidden>
+    <div class="panel-head panel-head-row">
+      <h2 id="labHeading">Polyrhythm &amp; phase lab</h2>
+      <button type="button" id="labLoadBtn" class="btn btn-primary">Load ensemble into studio</button>
+    </div>
+    <div class="control-row">
+      <label class="field">
+        <span>Ensemble</span>
+        <select id="labEnsembleSel"></select>
+      </label>
+      <label class="field">
+        <span>Lab tempo (BPM)</span>
+        <input type="number" id="labBpm" min="20" max="300" step="1" value="120" inputmode="numeric">
+      </label>
+      <label class="field">
+        <span>Sweep voice</span>
+        <select id="labVoiceSel"></select>
+      </label>
+    </div>
+    <div class="table-wrap"><table id="labCompareTable" class="data-table" aria-label="Ensemble comparison"></table></div>
+    <div class="table-wrap"><table id="labVoiceTable" class="data-table" aria-label="Voice detail for the active ensemble"></table></div>
+    <div class="split-row lab-split">
+      <figure class="viz-root">
+        <svg id="labNecklaceSvg" viewBox="0 0 420 420" role="img" aria-labelledby="labNecklaceTitle labNecklaceDesc">
+          <title id="labNecklaceTitle">Concentric Euclidean polygon necklace</title>
+          <desc id="labNecklaceDesc">Each ring draws one voice as a polygon over its own step period. Radial rays mark shared onsets in the LCM horizon.</desc>
+        </svg>
+        <figcaption id="labNecklaceCaption"></figcaption>
+      </figure>
+      <figure class="viz-root">
+        <svg id="labSweepSvg" viewBox="0 0 560 250" role="img" aria-labelledby="labSweepTitle labSweepDesc">
+          <title id="labSweepTitle">Rotation versus coincidence sweep</title>
+          <desc id="labSweepDesc">One bar per integer rotation of the selected voice. Focus or click a bar to inspect its coincidence count and syncopation.</desc>
+        </svg>
+        <figcaption id="labSweepCaption"></figcaption>
+        <div class="view-switch">
+          <button type="button" id="labApplyRotBtn" class="btn btn-ghost">Apply rotation</button>
+          <span class="hint lab-rot-readout" id="labRotReadout" role="status"></span>
+        </div>
+      </figure>
+    </div>
+    <div class="lab-audit">
+      <p class="lab-digest" id="labDigest"></p>
+      <div class="button-cluster">
+        <button type="button" id="labJsonBtn" class="btn btn-ghost">Brief .json</button>
+        <button type="button" id="labCsvBtn" class="btn btn-ghost">Brief .csv</button>
+        <button type="button" id="labMdBtn" class="btn btn-ghost">Brief .md</button>
+        <button type="button" id="labLinkBtn" class="btn btn-ghost">Copy share link</button>
+        <button type="button" id="labVerifyBtn" class="btn btn-ghost">Verify digest</button>
+        <button type="button" id="labTamperBtn" class="btn btn-ghost">Tamper check</button>
+      </div>
+      <label class="field lab-share-field" for="labShareOut">
+        <span>Share link</span>
+        <input type="text" id="labShareOut" readonly spellcheck="false" placeholder="Copy share link fills this field">
+      </label>
+      <p id="labAuditStatus" class="hint" role="status" aria-live="polite"></p>
+    </div>
+    <div class="lab-selftest">
+      <div class="button-cluster">
+        <button type="button" id="labSelfTestBtn" class="btn btn-ghost">Run self-tests</button>
+        <span id="labTestSummary" class="hint" role="status"></span>
+      </div>
+      <ol id="labTestList" class="lab-test-list" aria-label="Lab self-test results"></ol>
+    </div>
+    <p class="hint">Ensembles share the engine horizon cap of 4096 steps. Coincidence rays sample large cycles, and syncopation stays illustrative.</p>
+  </section>
+
   <!-- Syncopation -->
   <section class="panel" aria-labelledby="syncHeading">
     <div class="panel-head">
@@ -295,6 +363,7 @@
 </footer>
 
 <script src="rhythm.js"></script>
+<script src="polyrhythm-lab.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

@@ -254,8 +254,15 @@ function createPage(directory, options = {}) {
     constructor(...args) { super(...(args.length ? args : ['2026-11-15T12:00:00.000Z'])); }
     static now() { return Date.parse('2026-11-15T12:00:00.000Z'); }
   }
+  const location = {
+    origin: 'http://beatgrid.test',
+    pathname: '/index.html',
+    search: options.search || '',
+    hash: options.hash || '',
+    get href() { return this.origin + this.pathname + this.search + this.hash; }
+  };
   const sandbox = {
-    window, document, navigator, localStorage, location: { search: options.search || '' },
+    window, document, navigator, localStorage, location,
     performance: { now: () => now }, Date: FixtureDate, URL: FakeURL, URLSearchParams, Blob, TextEncoder, TextDecoder,
     getComputedStyle: () => ({ getPropertyValue: () => '#333333' }),
     requestAnimationFrame: callback => { animationFrames.push(callback); return animationFrames.length; },

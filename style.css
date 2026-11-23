@@ -709,6 +709,62 @@ code, pre { font-family: var(--mono); }
 :root[data-texture="on"] .sync-bar { fill: url(#bgTexture); }
 :root[data-texture="on"] .wheel-arc { stroke-dasharray: 4 3; }
 
+/* Polyrhythm and phase lab */
+.lab-split { margin-top: 12px; }
+.lab-compare-row { cursor: pointer; }
+.lab-compare-row.is-active { background: var(--accent-soft); }
+.lab-compare-row.is-active th { border-left: 3px solid var(--accent); padding-left: 7px; }
+.lab-compare-row:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.neck-guide { fill: none; stroke: var(--gridline); stroke-width: 1; }
+.neck-guide.is-baseline { stroke: var(--baseline); stroke-width: 1.25; }
+.neck-spoke { stroke: var(--gridline); stroke-width: 1; stroke-dasharray: 2 2; }
+.neck-poly { fill: none; stroke-width: 1.5; stroke-linejoin: bevel; opacity: 0.8; }
+.neck-dot { stroke: var(--surface-1); stroke-width: 1.25; }
+.neck-dot.is-rest { fill: var(--surface-1); stroke: var(--baseline); stroke-width: 1; opacity: 0.6; }
+.neck-ray { stroke: var(--accent); stroke-width: 1; opacity: 0.5; }
+.neck-label { font-family: var(--mono); font-size: 10px; fill: var(--text-secondary); font-weight: 700; }
+.neck-center { fill: var(--text-secondary); font-family: var(--mono); font-size: 10px; font-weight: 600; }
+.sweep-axis { stroke: var(--gridline); stroke-width: 1; }
+.sweep-tick { font-family: var(--mono); font-size: 9px; fill: var(--text-muted); }
+.sweep-bar { cursor: pointer; }
+.sweep-bar.is-mid { fill: var(--seq-300); }
+.sweep-bar.is-hocket { fill: var(--surface-3); stroke: var(--baseline); stroke-width: 1; }
+.sweep-bar.is-inphase { fill: var(--accent); }
+.sweep-bar.is-applied { stroke: var(--text-primary); stroke-width: 1.5; }
+.sweep-bar.is-selected { stroke: var(--focus); stroke-width: 2; }
+.sweep-bar:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.sweep-marker { fill: var(--text-primary); }
+.sweep-rot-label { font-family: var(--mono); font-size: 9px; fill: var(--text-secondary); }
+.lab-audit {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--gridline);
+}
+.lab-digest {
+  font-family: var(--mono);
+  font-size: 0.74rem;
+  color: var(--text-secondary);
+  word-break: break-all;
+  margin-bottom: 10px;
+}
+.lab-share-field { margin-top: 10px; max-width: 560px; }
+.lab-share-field input { width: 100%; min-width: 0; }
+.lab-selftest { margin-top: 12px; }
+.lab-selftest .button-cluster { align-items: center; }
+.lab-test-list {
+  margin: 10px 0 0;
+  padding-left: 20px;
+  columns: 2;
+  font-family: var(--mono);
+  font-size: 0.74rem;
+  color: var(--text-secondary);
+}
+@media (max-width: 700px) { .lab-test-list { columns: 1; } }
+.lab-test-list li { margin-bottom: 3px; }
+.lab-test-list li.is-ok { color: var(--text-secondary); }
+.lab-test-list li.is-bad { color: var(--accent); font-weight: 700; }
+.lab-test-list li.is-bad::marker { color: var(--accent); }
+
 .site-footer {
   padding: 20px clamp(16px, 3vw, 34px) 36px;
   border-top: 1px solid var(--border);
@@ -731,7 +787,8 @@ code, pre { font-family: var(--mono); }
   body { background: #ffffff; color: #000000; font-size: 10pt; }
   .site-header { padding: 0 0 10px; border-bottom: 1px solid #666; }
   .header-actions, .silence-note, .preset-row, .view-switch,
-  .remove-btn, .hex-toolbar, .skip-link, .tooltip, .button-cluster, .session-json { display: none !important; }
+  .remove-btn, .hex-toolbar, .skip-link, .tooltip, .button-cluster, .session-json,
+  #labPanel { display: none !important; }
   .workspace { padding: 12px 0 0; max-width: none; gap: 10px; }
   .panel, .stat-tile { box-shadow: none; border: 1px solid #888; break-inside: avoid; }
   .split-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
