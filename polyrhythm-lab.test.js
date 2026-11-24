@@ -408,7 +408,8 @@ test('sweep syncopation equals the engine syncopation of the rotated vector', ()
   for (const p of sweep.points) {
     assert.equal(p.syncopation, R.syncopationIndex(R.rotateVector(base, p.rotation)));
     const onsets = base.filter((x) => x === 1).length;
-    assert.ok(Math.abs(p.syncPerOnset - p.syncopation / onsets) < 1e-12);
+    const evaluatedOnsets = onsets * R.lcm(base.length, 16) / base.length;
+    assert.ok(Math.abs(p.syncPerOnset - p.syncopation / evaluatedOnsets) < 1e-12);
   }
 });
 

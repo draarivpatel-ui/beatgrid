@@ -204,6 +204,8 @@
       if (c0 === undefined || c1 === undefined) return null;
       if (c2 === -1 && j + 2 < text.length) return null;
       if (c3 === -1 && j + 3 < text.length) return null;
+      if (c2 < 0 && (c1 & 0x0f) !== 0) return null;
+      if (c2 >= 0 && c3 < 0 && (c2 & 0x03) !== 0) return null;
       var triple = (c0 << 18) | (c1 << 12) | ((c2 < 0 ? 0 : c2) << 6) | (c3 < 0 ? 0 : c3);
       out.push((triple >> 16) & 0xff);
       if (c2 >= 0) out.push((triple >> 8) & 0xff);
@@ -398,6 +400,8 @@
       if (t !== index) others.push(R.expandPattern(normalized[t].pattern, horizon));
     }
     var points = [];
+    var meterSteps = R.lcm(steps, 16);
+    var evaluatedOnsets = onsets * meterSteps / steps;
     for (var r = 0; r < steps; r++) {
       var rotated = R.rotateVector(base, r);
       var expanded = R.expandPattern(rotated, horizon);
@@ -418,7 +422,7 @@
         coincidences: coincidences,
         density: coincidences / horizon,
         syncopation: sync,
-        syncPerOnset: onsets === 0 ? 0 : sync / onsets,
+        syncPerOnset: evaluatedOnsets === 0 ? 0 : sync / evaluatedOnsets,
         meanHamming: others.length ? hammingSum / others.length : 0
       });
     }
@@ -638,6 +642,10 @@
     return lines.join('\n') + '\n';
   }
 
+  function markdownTableCell(value) {
+    return String(value).replace(/\\/g, '\\\\').replace(/\|/g, '\\|');
+  }
+
   function briefToMarkdown(stamped) {
     var lines = [];
     lines.push('# BeatGrid Polyrhythm Brief');
@@ -650,7 +658,7 @@
     lines.push('| Voice | Formula | Steps | Onsets | Vector | Canonical | Evenness | Sync/onset |');
     lines.push('| --- | --- | --- | --- | --- | --- | --- | --- |');
     stamped.voices.forEach(function (v) {
-      lines.push('| ' + v.name + ' | ' + v.formula + ' | ' + v.steps + ' | ' + v.onsets + ' | `' + v.vector + '` | `' + v.canonicalVector + '` | ' + v.evenness + ' | ' + v.syncPerOnset + ' |');
+      lines.push('| ' + markdownTableCell(v.name) + ' | ' + markdownTableCell(v.formula) + ' | ' + v.steps + ' | ' + v.onsets + ' | `' + v.vector + '` | `' + v.canonicalVector + '` | ' + v.evenness + ' | ' + v.syncPerOnset + ' |');
     });
     lines.push('');
     lines.push('Rotation sweep over voice ' + stamped.sweep.voiceIndex + ' (' + stamped.sweep.voiceName + '), ' + stamped.sweep.steps + ' rotations. In-phase maxima at r = ' + stamped.sweep.inPhase.join(', ') + '; hocket minima at r = ' + stamped.sweep.hocket.join(', ') + '.');

@@ -198,7 +198,7 @@ code, pre { font-family: var(--mono); }
 .brand { display: flex; align-items: center; gap: 12px; }
 .brand-mark { color: var(--accent); display: flex; }
 .brand-copy { display: flex; flex-direction: column; line-height: 1.25; }
-.brand-copy strong {
+.brand-copy h1 {
   font-size: 1.12rem;
   letter-spacing: -0.02em;
   font-weight: 700;
@@ -247,6 +247,10 @@ code, pre { font-family: var(--mono); }
 }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .button-cluster { display: flex; gap: 8px; flex-wrap: wrap; }
+
+@media (prefers-reduced-motion: reduce) {
+  .btn { transition: none; }
+}
 
 .silence-note {
   padding: 7px clamp(16px, 3vw, 34px);

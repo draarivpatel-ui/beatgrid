@@ -527,7 +527,7 @@
         });
         svg.appendChild(dot);
 
-        var hit = svgEl('circle', { cx: m.px, cy: m.py, r: 10, className: 'wheel-hit', tabindex: 0, role: 'button' });
+        var hit = svgEl('circle', { cx: m.px, cy: m.py, r: 10, className: 'wheel-hit', tabindex: 0, role: 'img' });
         var label = track.name + ', step ' + (m.step + 1) + ': ' + (m.isOn ? 'onset' : 'rest');
         hit.setAttribute('aria-label', label);
         var detail = {
@@ -923,6 +923,7 @@
       $('hexDump').textContent = '';
       flashNote('Invalid input: ' + error.message);
       if (!opts.skipEditor) renderEditor();
+      renderLab();
       return false;
     }
     ['downloadMidiBtn', 'downloadLyBtn', 'copyLyBtn', 'exportSessionBtn', 'downloadPatternsBtn'].forEach(function (id) { $(id).disabled = false; });
@@ -1047,7 +1048,7 @@
       } catch (error) {
         a = null;
       }
-      var tr = el('tr', { className: 'lab-compare-row' + (ens.id === lab.ensembleId ? ' is-active' : ''), tabindex: '0', 'data-ensemble': ens.id });
+      var tr = el('tr', { className: 'lab-compare-row' + (ens.id === lab.ensembleId ? ' is-active' : ''), tabindex: '0', 'data-ensemble': ens.id, 'aria-current': ens.id === lab.ensembleId ? 'true' : null });
       tr.appendChild(el('th', { scope: 'row' }, ens.name));
       if (a) {
         tr.appendChild(el('td', { className: 'num' }, String(a.voices.length)));
@@ -1227,7 +1228,7 @@
       if (i === lab.selectedRotation) cls += ' is-selected';
       var bar = svgEl('rect', {
         x: x.toFixed(2), y: y.toFixed(2), width: barWidth.toFixed(2), height: Math.max(1, barH).toFixed(2),
-        className: cls, tabindex: '0', role: 'button'
+        className: cls, tabindex: '0', role: 'button', 'aria-pressed': i === lab.selectedRotation ? 'true' : 'false'
       });
       bar.setAttribute('aria-label', 'Rotation ' + i + ' of ' + n + ': ' + p.coincidences + ' coincidences, syncopation ' + p.syncopation +
         (i === applied ? ', currently applied' : ''));
@@ -1276,6 +1277,40 @@
     $('labDigest').setAttribute('title', lab.brief.digest);
   }
 
+  function setLabActionsEnabled(enabled) {
+    ['labJsonBtn', 'labCsvBtn', 'labMdBtn', 'labLinkBtn', 'labVerifyBtn', 'labTamperBtn', 'labApplyRotBtn'].forEach(function (id) {
+      $(id).disabled = !enabled;
+    });
+    $('labLoadBtn').disabled = !enabled || lab.ensembleId === LAB.LIVE_ID;
+  }
+
+  function clearLabDetails() {
+    clear($('labVoiceTable'));
+    clear($('labVoiceSel'));
+    clear($('labNecklaceSvg'));
+    clear($('labSweepSvg'));
+    $('labNecklaceSvg').appendChild(svgEl('title', { id: 'labNecklaceTitle' }, 'Necklace unavailable'));
+    $('labSweepSvg').appendChild(svgEl('title', { id: 'labSweepTitle' }, 'Rotation sweep unavailable'));
+    $('labNecklaceCaption').textContent = '';
+    $('labSweepCaption').textContent = '';
+    $('labRotReadout').textContent = '';
+    $('labDigest').textContent = '';
+    $('labDigest').removeAttribute('data-digest');
+    $('labDigest').removeAttribute('title');
+  }
+
+  function invalidateLab(message) {
+    lab.analysis = null;
+    lab.sweep = null;
+    lab.brief = null;
+    lab.analysisKey = '';
+    lab.sweepKey = '';
+    renderLabCompare();
+    clearLabDetails();
+    setLabActionsEnabled(false);
+    setLabStatus(message);
+  }
+
   function renderLab() {
     if (!lab.ready) return;
     try {
@@ -1286,9 +1321,9 @@
       renderNecklace();
       renderSweep();
       renderDigest();
-      $('labLoadBtn').disabled = lab.ensembleId === LAB.LIVE_ID;
+      setLabActionsEnabled(true);
     } catch (error) {
-      setLabStatus('Lab paused: ' + error.message);
+      invalidateLab('Lab paused: ' + error.message);
     }
   }
 

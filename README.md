@@ -103,7 +103,7 @@ Run from this repository:
 node --test
 ```
 
-**530 tests pass, with zero failures or skipped tests.** The suite covers canonical patterns, rotations, arithmetic limits, meter phases, MIDI event timing and duplicate handling, chunk validation, LilyPond source, session round-trips, and browser controller regressions including the silent cycle playhead.
+**538 tests pass, with zero failures or skipped tests.** The suite covers canonical patterns, rotations, arithmetic limits, meter phases, MIDI event timing and duplicate handling, chunk validation, LilyPond source, session round-trips, and browser controller regressions including the silent cycle playhead.
 
 [ui.test.js](ui.test.js) executes the actual HTML and scripts with a deterministic DOM harness. It checks IDs and accessibility references, startup in both readiness states, pad editing, import rejection, invalid-input recovery, voice limits, themes, and real Blob downloads. The harness does not perform browser layout or visual rendering.
 
@@ -121,7 +121,7 @@ node --test
 | [polyrhythm-lab.js](polyrhythm-lab.js) | Pure UMD lab module: ensembles, sweeps, SHA-256, brief exports, hash codec, self-tests |
 | [app.js](app.js) | Browser controller |
 | [index.html](index.html), [style.css](style.css) | Workspace and responsive/print styles |
-| [test.js](test.js), [regression.test.js](regression.test.js), [ui.test.js](ui.test.js), [wave3.test.js](wave3.test.js), [wave4.test.js](wave4.test.js), [polyrhythm-lab.test.js](polyrhythm-lab.test.js), [lab-ui.test.js](lab-ui.test.js) | Automated verification |
+| [test.js](test.js), [regression.test.js](regression.test.js), [ui.test.js](ui.test.js), [wave3.test.js](wave3.test.js), [wave4.test.js](wave4.test.js), [polyrhythm-lab.test.js](polyrhythm-lab.test.js), [lab-ui.test.js](lab-ui.test.js), [revamp.test.js](revamp.test.js) | Automated verification |
 | [dom-harness.cjs](dom-harness.cjs) | Local DOM, event, clock, and download fixtures |
 
 ## License
