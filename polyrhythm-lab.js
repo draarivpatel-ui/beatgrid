@@ -608,7 +608,8 @@
    */
   function csvCell(value) {
     var s = value === null || value === undefined ? '' : String(value);
-    if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+    var formula = /^[\t\r\n]/.test(s) || /^[\p{White_Space}\p{Cc}\p{Cf}\p{M}]*[=+\-@]/u.test(s);
+    if (typeof value !== 'number' && formula) s = "'" + s;
     if (/[",\n\r]/.test(s)) s = '"' + s.replace(/"/g, '""') + '"';
     return s;
   }

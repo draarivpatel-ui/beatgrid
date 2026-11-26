@@ -805,3 +805,20 @@ test('self-test runner is deterministic across repeated runs', () => {
   assert.deepEqual(a.results.map((r) => r.ok), b.results.map((r) => r.ok));
   assert.equal(a.total, b.total);
 });
+
+test('csvCell neutralizes formulas behind invisible Unicode and preserves negative numbers', () => {
+  for (const input of ['\u200b=1+1', '\u00a0+2', ' =3', '\u061c@sum', '\tx']) {
+    const escaped = L.csvCell(input);
+    const first = escaped.charAt(0) === '"' ? escaped.charAt(1) : escaped.charAt(0);
+    assert.equal(first, "'", input);
+  }
+  assert.equal(L.csvCell(-2), '-2');
+});
+
+test('track names truncate by Unicode code points without splitting surrogate pairs', () => {
+  const rocket = String.fromCodePoint(0x1f680);
+  const name = 'x'.repeat(39) + rocket + 'tail';
+  const track = R.normalizeTracks([{ name: name, pattern: vec('1001') }])[0];
+  assert.equal(Array.from(track.name).length, 40);
+  assert.equal(Array.from(track.name).at(-1), rocket);
+});

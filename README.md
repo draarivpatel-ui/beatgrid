@@ -103,7 +103,7 @@ Run from this repository:
 node --test
 ```
 
-**538 tests pass, with zero failures or skipped tests.** The suite covers canonical patterns, rotations, arithmetic limits, meter phases, MIDI event timing and duplicate handling, chunk validation, LilyPond source, session round-trips, and browser controller regressions including the silent cycle playhead.
+**540 tests pass, with zero failures or skipped tests.** The suite covers canonical patterns, rotations, arithmetic limits, meter phases, MIDI event timing and duplicate handling, chunk validation, LilyPond source, session round-trips, and browser controller regressions including the silent cycle playhead.
 
 [ui.test.js](ui.test.js) executes the actual HTML and scripts with a deterministic DOM harness. It checks IDs and accessibility references, startup in both readiness states, pad editing, import rejection, invalid-input recovery, voice limits, themes, and real Blob downloads. The harness does not perform browser layout or visual rendering.
 

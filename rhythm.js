@@ -170,7 +170,8 @@
 
   function safeText(value, fallback, maxLength) {
     if (typeof value !== 'string' || value.length === 0) return fallback;
-    return value.replace(/[\x00-\x1f\x7f-\x9f\u2028\u2029]+/g, ' ').trim().slice(0, maxLength || 80) || fallback;
+    var cleaned = value.replace(/[\x00-\x1f\x7f-\x9f\u2028\u2029]+/g, ' ').trim();
+    return Array.from(cleaned).slice(0, maxLength || 80).join('') || fallback;
   }
 
   function binaryPattern(pattern, allowEmpty) {
