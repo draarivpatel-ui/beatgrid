@@ -174,9 +174,9 @@
     return Array.from(cleaned).slice(0, maxLength || 80).join('') || fallback;
   }
 
-  function binaryPattern(pattern, allowEmpty) {
+  function binaryPattern(pattern) {
     if (!Array.isArray(pattern)) throw new TypeError('pattern must be an array');
-    if ((!allowEmpty && pattern.length === 0) || pattern.length > MAX_STEPS) {
+    if (pattern.length === 0 || pattern.length > MAX_STEPS) {
       throw new RangeError('pattern needs 1 to ' + MAX_STEPS + ' steps');
     }
     return Array.from(pattern, function (value) {
